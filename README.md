@@ -1,4 +1,4 @@
-# code-editor
+# react-code-editor
 
 An Electron application with React
 
