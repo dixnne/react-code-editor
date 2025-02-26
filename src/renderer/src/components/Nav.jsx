@@ -10,8 +10,8 @@ function Nav({ onAction }) {
 
     const actions = [
         { icon: "bi-file-earmark-plus", label: "New File", action: () => handleAction("new-file") },
-        { icon: "bi-upload", label: "Open File", action: () => handleAction("open-file") },
-        { icon: "bi-box-arrow-down", label: "Download", action: () => handleAction("download") },
+        { icon: "bi-box-arrow-down", label: "Open File", action: () => handleAction("open-file") },
+        { icon: "bi-upload", label: "Download", action: () => handleAction("download") },
         { icon: "bi-floppy", label: "Save", action: () => handleAction("save-file") },
     ];
 
