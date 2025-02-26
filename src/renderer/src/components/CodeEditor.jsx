@@ -68,8 +68,8 @@ function CodeEditor({ action }) {
 
     return (
         <Box height="100%">
-            <HStack alignItems="start" h={450}>
-                <Stack height="100%">
+            <HStack gap={0} alignItems="start" h={450}>
+                <Stack gap={0} height="100%">
                     <AceEditor
                         width="50vw"
                         height="100%"
@@ -100,7 +100,7 @@ function CodeEditor({ action }) {
                     <TabsMenu />
                 </Box>
             </HStack>
-            <Stack height="100%" mt={3} bg="#51557E">
+            <Stack height="100%" bg="#51557E">
                 <Box color="white" bg="#816797" px={4} py={2}>
                     <span>Errors</span>
                 </Box>
