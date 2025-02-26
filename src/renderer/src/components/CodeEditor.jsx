@@ -8,11 +8,12 @@ function CodeEditor({ action }) {
     const [editorContent, setEditorContent] = useState("Start coding!");
     const [filePath, setFilePath] = useState(null);
     const [line, setLine] = useState(1);
-    const [column, setColumn] = useState(1); 
+    const [column, setColumn] = useState(1);
 
     useEffect(() => {
         if (action === "open-file") openFile();
         if (action === "save-file") saveFile();
+        if (action === "save-file-as") saveFileAs();
         if (action === "new-file") newFile();
     }, [action]);
 
@@ -32,18 +33,24 @@ function CodeEditor({ action }) {
     };
 
     const saveFile = async () => {
+        if (!filePath) {
+            await saveFileAs();
+            return;
+        }
         if (window.electron) {
-            if (filePath) {
-                const success = await window.electron.saveFile({ path: filePath, content: editorContent });
-                if (success) {
-                    console.log("File saved successfully!");
-                }
-            } else {
-                const result = await window.electron.saveFileAs({ content: editorContent });
-                if (result) {
-                    setFilePath(result.path);
-                    console.log("File saved successfully at:", result.path);
-                }
+            const success = await window.electron.saveFile({ path: filePath, content: editorContent });
+            if (success) {
+                console.log("File saved successfully!");
+            }
+        }
+    };
+
+    const saveFileAs = async () => {
+        if (window.electron) {
+            const result = await window.electron.saveFileAs({ content: editorContent });
+            if (result) {
+                setFilePath(result.path);
+                console.log("File saved successfully at:", result.path);
             }
         }
     };
