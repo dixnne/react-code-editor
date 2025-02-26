@@ -1,10 +1,10 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron';
+import { join } from 'path';
+import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+import fs from 'fs';
+import icon from '../../resources/icon.png?asset';
 
 function createWindow() {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -13,62 +13,109 @@ function createWindow() {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      enableRemoteModule: false,
     }
-  })
+  });
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
-  })
+    mainWindow.show();
+  });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+    shell.openExternal(details.url);
+    return { action: 'deny' };
+  });
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.electron');
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
+    optimizer.watchWindowShortcuts(window);
+  });
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  ipcMain.on('ping', () => console.log('pong'));
 
-  createWindow()
+  createWindow();
 
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit()
+    app.quit();
   }
-})
+});
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+ipcMain.handle("open-file", async () => {
+  const { filePaths, canceled } = await dialog.showOpenDialog({
+    title: "Select a File",
+    buttonLabel: "Open",  
+    properties: ["openFile"],
+    filters: [{ name: "All Files", extensions: ["*"] }]
+  });
+
+  if (!canceled && filePaths.length > 0) {
+    const content = fs.readFileSync(filePaths[0], "utf-8");
+    return { path: filePaths[0], content };
+  }
+  return null;
+});
+
+ipcMain.handle("open-folder", async () => {
+  const { filePaths, canceled } = await dialog.showOpenDialog({
+    title: "Select a Folder",
+    buttonLabel: "Open",
+    properties: ["openDirectory"]
+  });
+
+  return !canceled && filePaths.length > 0 ? filePaths[0] : null;
+});
+
+ipcMain.handle("save-file", async (_, { path, content }) => {
+  if (path) {
+    fs.writeFileSync(path, content, "utf-8");
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle("write-file", async () => {
+  const { filePath, canceled } = await dialog.showSaveDialog({
+    title: "Save File",
+    buttonLabel: "Save",
+    filters: [{ name: "All Files", extensions: ["*"] }]
+  });
+
+  if (!canceled && filePath) {
+    fs.writeFileSync(filePath, "", "utf-8");
+    return filePath;
+  }
+  return null;
+});
+
+ipcMain.handle("save-file-as", async (event, data) => {
+  const { filePath } = await dialog.showSaveDialog({
+      title: "Save File",
+      defaultPath: "untitled.c",
+      filters: [{ name: "C Files", extensions: ["c"] }, { name: "All Files", extensions: ["*"] }]
+  });
+
+  if (filePath) {
+      fs.writeFileSync(filePath, data.content, "utf-8");
+      return { path: filePath };
+  }
+
+  return null;
+});

@@ -1,4 +1,4 @@
-import { contextBridge } from 'electron'
+const { contextBridge, ipcRenderer } = require('electron');
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
@@ -9,7 +9,13 @@ const api = {}
 // just add to the DOM global.
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
+    contextBridge.exposeInMainWorld('electron', {
+      openFile: () => ipcRenderer.invoke("open-file"),
+      openFolder: () => ipcRenderer.invoke("open-folder"),
+      saveFile: (data) => ipcRenderer.invoke("save-file", data),
+      saveFileAs: (data) => ipcRenderer.invoke("save-file-as", data),
+      writeFile: () => ipcRenderer.invoke("write-file"),
+    });
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
