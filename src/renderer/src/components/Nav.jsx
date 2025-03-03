@@ -2,8 +2,34 @@ import { HStack, Button } from "@chakra-ui/react";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import Dropdown from "./Dropdown";
 import OffCanvasMenu from "./OffCanvasMenu";
+import { useState } from "react";
+import Themes from "../assets/themes.js";
 
-function Nav({ onAction }) {
+
+
+function Nav({ onAction, changeTheme }) {
+
+    const [theme, setTheme] = useState("pointerOfDoom")
+
+    function handleThemeChange(t) {
+        setTheme(t)
+        changeTheme(t)
+    }
+
+    function getThemes() {
+        const themes = []
+        for (const t in Themes) {
+            const obj = {
+                label: Themes[t].name, 
+                action: () => handleThemeChange(Themes[t].code)
+            }
+            themes.push(obj)
+        }
+        console.log(Themes, themes);
+        
+        return themes
+    }
+
     const handleAction = (action) => {
         onAction(null);
         setTimeout(() => onAction(action), 0);
@@ -14,11 +40,11 @@ function Nav({ onAction }) {
         { icon: "bi-box-arrow-down", label: "Open File", action: () => handleAction("open-file") },
         { icon: "bi-floppy", label: "Save", action: () => handleAction("save-file") },
         { icon: "bi-printer", label: "Save as", action: () => handleAction("save-file-as") },
-        { icon: "bi-file-excel", label: "Close", action: () => handleAction("save-file-as") },
+        { icon: "bi-file-excel", label: "Close", action: () => handleAction("close-file") },
     ];
 
     return (
-        <HStack wrap="wrap" justifyContent="space-between" gap="6" p={3} bg="#51557E">
+        <HStack wrap="wrap" justifyContent="space-between" gap="6" p={3} bg={Themes[theme].primary}>
             <HStack>
                 <OffCanvasMenu></OffCanvasMenu>
                 <Dropdown
@@ -37,13 +63,19 @@ function Nav({ onAction }) {
                     </Button>
                 ))}
             </HStack>
-            <Dropdown
-                icon={<i className="bi bi-play-fill"></i>}
-                items={[
-                    { label: "Run", action: () => handleAction("run") },
-                    { label: "Debug", action: () => handleAction("debug") }
-                ]}
-            />
+            <HStack>
+                <Dropdown
+                    icon={<i className="bi bi-play-fill"></i>}
+                    items={[
+                        { label: "Run", action: () => handleAction("run") },
+                        { label: "Debug", action: () => handleAction("debug") }
+                    ]}
+                />
+                <Dropdown
+                    icon={<i className="bi bi-palette"></i>}
+                    items={getThemes()}
+                />
+            </HStack>
         </HStack>
     );
 }

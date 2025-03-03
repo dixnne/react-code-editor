@@ -2,23 +2,30 @@ import { Box } from "@chakra-ui/react";
 import CodeEditor from "./components/CodeEditor";
 import Nav from "./components/Nav";
 import { useState } from "react";
+import Themes from "./assets/themes.js";
 
 
 function App() {
-  const [action, setAction] = useState(null);
+  const [action, setAction] = useState(null)
+  const [theme, setTheme] = useState("pointerOfDoom")
+
+  function handleThemeChange(t) {
+    setTheme(t);
+  }
+
   return (
     <Box
       minH="100vh"
-      bg="#1F2544"
+      bg={Themes[theme].background}
     >
-      <Nav onAction={setAction}></Nav>
+      <Nav changeTheme={handleThemeChange} onAction={setAction}></Nav>
       <Box
-        color="#FFD0EC"
+        color={Themes[theme].text}
         px={6}
         py={8}
         height="100%"
       >
-        <CodeEditor action={action}></CodeEditor>
+        <CodeEditor theme={theme} action={action}></CodeEditor>
       </Box>
     </Box>
   )
