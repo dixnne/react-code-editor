@@ -1,0 +1,60 @@
+/* En tu archivo CSS principal (ej. index.css) */
+
+/* Estilos actualizados para el modo DreamC en Ace Editor */
+/* Usando tema oscuro como base (ej. Monokai/Dracula) */
+
+/* Color 1: Números (azul/cian) */
+.ace_editor .ace_constant.ace_numeric {
+  color: #66d9ef; /* Cian brillante */
+}
+
+/* Color 2: Identificadores (blanco/color base del tema) */
+.ace_editor .ace_identifier {
+  color: #f8f8f2; /* Blanco (ajusta según tu tema base) */
+}
+/* También aplica al token por defecto si no es keyword */
+.ace_editor .ace_variable.ace_language {
+  color: #f8f8f2;
+}
+
+
+/* Color 3: Comentarios (gris/morado tenue) */
+.ace_editor .ace_comment {
+  color: #ae81ff; /* Morado tenue */
+  font-style: italic;
+}
+
+/* Color 4: Palabras Reservadas (rosa/magenta) */
+.ace_editor .ace_keyword.ace_control {
+  color: #ff79c6; /* Rosa/Magenta */
+  font-weight: bold;
+}
+
+/* Color 5: Operadores Aritméticos (+, -, *, /) (amarillo/naranja) */
+.ace_editor .ace_keyword.ace_operator.ace_arithmetic {
+  color: #f1fa8c; /* Amarillo */
+}
+
+/* Color 6: Operadores Lógicos/Relacionales/Asignación (!, <, >, <=, >=, ==, !=, &&, ||, =) (rojo/naranja) */
+.ace_editor .ace_keyword.ace_operator.ace_logical,
+.ace_editor .ace_keyword.ace_operator.ace_assignment {
+  color: #ff5555; /* Rojo */
+}
+
+/* Color 7: Cadenas (verde) */
+.ace_editor .ace_string {
+  color: #50fa7b; /* Verde brillante */
+}
+
+/* Color 8: Operadores Especiales (@*, ...+, |>, ->) (cian/turquesa) */
+.ace_editor .ace_keyword.ace_operator.ace_special {
+  color: #8be9fd; /* Cian */
+}
+
+
+/* Delimitadores y Puntuación: ( ) { } , ; (blanco/color base) */
+.ace_editor .ace_paren,
+.ace_editor .ace_punctuation.ace_operator {
+   color: #f8f8f2; /* Blanco (ajusta según tu tema base) */
+}
+

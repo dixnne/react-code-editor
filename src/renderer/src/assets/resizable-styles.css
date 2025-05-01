@@ -1,0 +1,51 @@
+/* Estilos básicos para los divisores (handles) */
+.resize-handle-vertical,
+.resize-handle-horizontal {
+  background-color: #555; /* Un color oscuro para el divisor */
+  position: relative;
+  outline: none; /* Quitar borde al hacer foco */
+  /* Transición suave para el cambio de color */
+  transition: background-color 0.2s ease;
+}
+
+.resize-handle-vertical {
+  width: 6px; /* Grosor del divisor vertical */
+  cursor: col-resize; /* Cursor para indicar redimensionamiento horizontal */
+  margin: 0 -3px; /* Centrar visualmente el handle sobre el borde */
+  z-index: 10; /* Asegurar que esté por encima de otros elementos si es necesario */
+}
+
+.resize-handle-horizontal {
+  height: 6px; /* Grosor del divisor horizontal */
+  cursor: row-resize; /* Cursor para indicar redimensionamiento vertical */
+  margin: -3px 0; /* Centrar visualmente el handle sobre el borde */
+  z-index: 10; /* Asegurar que esté por encima de otros elementos si es necesario */
+
+}
+
+/* Estilo opcional para cuando el usuario está arrastrando el divisor */
+.resize-handle-vertical[data-resize-handle-active],
+.resize-handle-horizontal[data-resize-handle-active] {
+  background-color: #007bff; /* Cambiar a un color más brillante al arrastrar */
+}
+
+/* Asegúrate de que los paneles internos ocupen todo el espacio disponible
+   y permitan el scroll interno si su contenido es muy grande */
+.Panel > div { /* Asumiendo que tus componentes (EditorArea, etc.) tienen un div raíz */
+  height: 100%;
+  width: 100%;
+  overflow: auto; /* Permite scroll DENTRO de cada panel si es necesario */
+}
+
+/* Específicamente para el componente AceEditor dentro de EditorArea,
+   asegúrate de que tenga altura 100% para llenar su contenedor Panel */
+/* (Esto puede variar según la estructura interna de tu EditorArea) */
+/* .editor-container-class { */
+/* height: 100%; */
+/* display: flex; */
+/* flex-direction: column; */
+/* } */
+/* .ace-editor-class { */
+/* flex-grow: 1; */
+/* } */
+
