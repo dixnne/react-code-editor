@@ -17,7 +17,7 @@ import DreamCMode from "../ace/mode/dreamc_mode"; // Asegúrate que este archivo
 import TabsMenu from "./TabsMenu";
 import Themes from "../assets/themes.js";
 
-function CodeEditor({ action, theme }) {
+function CodeEditor({ action, theme, onContentChange }) {
     const [editorContent, setEditorContent] = useState(
         '#include <stdio.h>\n\nint main() {\n    // Comentario\n    printf("¡Hola, mundo!\\n");\n    int numero = 10;\n    if (numero > 5) {\n        return 0;\n    }\n    return 1;\n}'
     ); // Código de ejemplo C para probar resaltado inicial
@@ -113,6 +113,9 @@ function CodeEditor({ action, theme }) {
 
     const handleChange = (value) => {
         setEditorContent(value);
+        if (onContentChange) {
+            onContentChange(value);
+        }
     };
 
     const handleCursorChange = (selection) => {

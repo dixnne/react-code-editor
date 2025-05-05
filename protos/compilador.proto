@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package lexer;
+
+service Lexer {
+  rpc Analyze(AnalyzeRequest) returns (TokenList);
+}
+
+message AnalyzeRequest {
+  string input = 1;
+}
+
+message Token {
+  string token_type = 1;
+  string lexeme = 2;
+  uint32 line = 3;
+  uint32 column = 4;
+}
+
+message TokenList {
+  repeated Token tokens = 1;
+}

@@ -15,6 +15,7 @@ if (process.contextIsolated) {
       saveFile: (data) => ipcRenderer.invoke("save-file", data),
       saveFileAs: (data) => ipcRenderer.invoke("save-file-as", data),
       writeFile: () => ipcRenderer.invoke("write-file"),
+      runLexer: (code) => ipcRenderer.invoke("run-lexer", code),
     });
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {

@@ -3,6 +3,14 @@ import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import fs from 'fs';
 import icon from '../../resources/icon.png?asset';
+import protoLoader from '@grpc/proto-loader';
+import grpc from '@grpc/grpc-js';
+
+const PROTO_PATH = join(__dirname, '../../protos/compilador.proto');
+const packageDefinition = protoLoader.loadSync(PROTO_PATH);
+const lexerProto = grpc.loadPackageDefinition(packageDefinition).lexer;
+console.log('Lexer Proto:', lexerProto);
+const client = new lexerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -118,4 +126,19 @@ ipcMain.handle("save-file-as", async (event, data) => {
   }
 
   return null;
+});
+
+ipcMain.handle('run-lexer', async (_event, code) => {
+  console.log("Received code for lexing:", code);
+  return new Promise((resolve, reject) => {
+    client.Analyze({ input: code }, (err, response) => {
+      if (err) {
+        console.error("gRPC Lexer Error:", err);
+        reject(err.message);
+      } else {
+        console.log("gRPC Lexer Response:", response);
+        resolve(response);
+      }
+    });
+  });
 });
