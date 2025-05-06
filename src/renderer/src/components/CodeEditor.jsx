@@ -17,7 +17,7 @@ import DreamCMode from "../ace/mode/dreamc_mode"; // Asegúrate que este archivo
 import TabsMenu from "./TabsMenu";
 import Themes from "../assets/themes.js";
 
-function CodeEditor({ action, theme, onContentChange }) {
+function CodeEditor({ action, theme, tokens, onContentChange }) {
     const [editorContent, setEditorContent] = useState(
         '#include <stdio.h>\n\nint main() {\n    // Comentario\n    printf("¡Hola, mundo!\\n");\n    int numero = 10;\n    if (numero > 5) {\n        return 0;\n    }\n    return 1;\n}'
     ); // Código de ejemplo C para probar resaltado inicial
@@ -132,6 +132,32 @@ function CodeEditor({ action, theme, onContentChange }) {
      // Definir colores/temas para el resto de la UI si es necesario
     const currentThemeUI = Themes && Themes[theme] ? Themes[theme] : { primary: '#343a40', secondary: '#6c757d', tertiary: '#e9ecef', secondarySemi: '#495057' };
 
+    function printLexicalErrors(t) {
+        if (!t || t.length === 0) return <div>No hay errores léxicos.</div>;
+        return (
+            t.map((token, index) => (
+                token.tokenType === "Invalid" ? (
+                    <p>Error: Invalid token "{token.lexeme}" at line {token.line} col {token.column}</p>
+                ) : (
+                    ""
+                )
+            )
+        ));
+    }
+
+    function renderActiveWindow(active) {
+        switch (active) {
+            case 0:
+                return <Box overflowY="auto" maxH="150px" px={3} bg={currentThemeUI.primary}>
+                    {printLexicalErrors(tokens.tokens)}
+                </Box>;
+            case 1:
+                return <Box px={3} height="100%" bg={currentThemeUI.primary}>Execution</Box>;
+            default:
+                return <Box height="100%" bg={currentThemeUI.primary}></Box>;
+        }
+    }
+
     return (
         <Box height="100%">
             <HStack gap={0} alignItems="start" h={450}>
@@ -165,7 +191,7 @@ function CodeEditor({ action, theme, onContentChange }) {
                     </HStack>
                 </Stack>
                 <Box w="50vw" h="100%" bg={currentThemeUI.secondarySemi}>
-                    <TabsMenu theme={theme} />
+                    <TabsMenu tokens={tokens} theme={theme} />
                 </Box>
             </HStack>
             <Stack height="100%" bg={currentThemeUI.primary}>
@@ -179,10 +205,12 @@ function CodeEditor({ action, theme, onContentChange }) {
                         </li>
                     </ul>
                 </Box>
-                <Box height={150}></Box>
+                <Box height={150}>
+                    {renderActiveWindow(active)}
+                </Box>
                 <HStack justifyContent="end" bg={currentThemeUI.tertiary} color="black" px={4} py={2}>
                     {/* *** CORRECCIÓN AQUÍ: Verifica filePath antes de usar split *** */}
-                    <span>{filePath ? filePath.split(/[\\/]/).pop() : "Untitled"} - C main</span>
+                    <span>{filePath ? filePath.split(/[\\/]/).pop() : "Untitled"} - DreamC main</span>
                 </HStack>
             </Stack>
         </Box>

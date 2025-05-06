@@ -48,7 +48,7 @@ function App() {
         py={8}
         height="100%"
       >
-        <CodeEditor theme={theme} action={action} onContentChange={handleContentChange}></CodeEditor>
+        <CodeEditor theme={theme} action={action} tokens={tokens} onContentChange={handleContentChange}></CodeEditor>
       </Box>
     </Box>
   )
