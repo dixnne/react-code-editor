@@ -34,8 +34,6 @@ pub enum TokenType {
     Identifier,
     Integer,
     Float,
-    Imaginary,
-    Complex,
     String,
     
     // Operators
@@ -311,27 +309,47 @@ impl<'a> LexicalAnalyzer<'a> {
             }
             
             // Strings
-            '"' => {
-                let mut string_content = String::new();
-                let mut end_found = false;
-                
-                while !end_found && !self.is_at_end() {
-                    let current_char = self.advance().unwrap_or('\0');
-                    
-                    if current_char == '"' {
-                        end_found = true;
+            '\'' | '"' => {
+                let quote_char = ch;
+                let mut string = String::new();
+                let mut terminated = false;
+            
+                while let Some(nch) = self.peek() {
+                    if nch == quote_char {
+                        self.advance();
+                        terminated = true;
+                        break;
+                    } else if nch == '\\' {
+                        // Handle escape sequences
+                        self.advance(); // Consume backslash
+                        if let Some(escaped) = self.advance() {
+                            match escaped {
+                                '\\' => string.push('\\'),
+                                'n' => string.push('\n'),
+                                't' => string.push('\t'),
+                                'r' => string.push('\r'),
+                                '\'' => string.push('\''),
+                                '"' => string.push('"'),
+                                other => string.push(other),
+                            }
+                        } else {
+                            return LexerToken::new(TokenType::Invalid, "Unterminated escape sequence".to_string(), self.line, start_column);
+                        }
+                    } else if nch == '\n' {
+                        // Treat newline as an error in strings
+                        return LexerToken::new(TokenType::Invalid, "Newline in string literal".to_string(), self.line, start_column);
                     } else {
-                        string_content.push(current_char);
+                        string.push(self.advance().unwrap());
                     }
                 }
-                
-                if end_found {
-                    LexerToken::new(TokenType::String, format!("\"{}\"", string_content), self.line, start_column)
-                } else {
-                    LexerToken::new(TokenType::Invalid, format!("\"{}\"", string_content), self.line, start_column)
-                }
-            }
             
+                if !terminated {
+                    return LexerToken::new(TokenType::Invalid, "Unterminated string literal".to_string(), self.line, start_column);
+                }
+            
+                LexerToken::new(TokenType::String, string, self.line, start_column)
+            }
+
             // Identifiers and keywords
             ch if ch.is_alphabetic() || ch == '_' => {
                 let mut identifier = String::new();
@@ -352,7 +370,7 @@ impl<'a> LexicalAnalyzer<'a> {
                 }
             }
             
-            // Numbers
+            // Numbers (simplified to just integers and floats)
             ch if ch.is_digit(10) => {
                 let mut number = String::new();
                 number.push(ch);
@@ -381,49 +399,11 @@ impl<'a> LexicalAnalyzer<'a> {
                         }
                     }
                     
-                    // Check for imaginary number (with 'i' suffix)
-                    if self.peek() == Some('i') {
-                        number.push(self.advance().unwrap());
-                        return LexerToken::new(TokenType::Imaginary, number, self.line, start_column);
-                    }
-                    
                     if has_decimal_digit {
                         return LexerToken::new(TokenType::Float, number, self.line, start_column);
                     } else {
                         return LexerToken::new(TokenType::Invalid, number, self.line, start_column);
                     }
-                }
-                
-                // Check for imaginary number (with 'i' suffix)
-                if self.peek() == Some('i') {
-                    number.push(self.advance().unwrap());
-                    return LexerToken::new(TokenType::Imaginary, number, self.line, start_column);
-                }
-                
-                // Check for complex number format
-                if self.peek() == Some('+') {
-                    let start_pos = number.clone();
-                    number.push(self.advance().unwrap());
-                    
-                    // Real part after '+'
-                    let mut has_real_digit = false;
-                    while let Some(next_char) = self.peek() {
-                        if next_char.is_digit(10) {
-                            number.push(self.advance().unwrap());
-                            has_real_digit = true;
-                        } else {
-                            break;
-                        }
-                    }
-                    
-                    // Check for imaginary part with 'i'
-                    if has_real_digit && self.peek() == Some('i') {
-                        number.push(self.advance().unwrap());
-                        return LexerToken::new(TokenType::Complex, number, self.line, start_column);
-                    }
-                    
-                    // Not a valid complex number format
-                    return LexerToken::new(TokenType::Invalid, format!("{}{}", start_pos, number), self.line, start_column);
                 }
                 
                 LexerToken::new(TokenType::Integer, number, self.line, start_column)
