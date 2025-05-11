@@ -57,6 +57,8 @@ pub enum TokenType {
     AtAsterisk,
     DotsPlus,
     PipeGreater,
+    Increment,
+    Decrement,
     
     // Delimiters
     LeftParen,
@@ -245,14 +247,22 @@ impl<'a> LexicalAnalyzer<'a> {
             }
             
             // Operators
-            '+' => LexerToken::new(TokenType::Plus, "+".to_string(), self.line, start_column),
+            '+' => {
+                if self.match_next('+') {
+                    LexerToken::new(TokenType::Increment, "++".to_string(), self.line, start_column)
+                } else {
+                    LexerToken::new(TokenType::Plus, "+".to_string(), self.line, start_column)
+                }
+            },
             '-' => {
-                if self.match_next('>') {
+                if self.match_next('-') {
+                    LexerToken::new(TokenType::Decrement, "--".to_string(), self.line, start_column)
+                } else if self.match_next('>') {
                     LexerToken::new(TokenType::ArrowRight, "->".to_string(), self.line, start_column)
                 } else {
                     LexerToken::new(TokenType::Minus, "-".to_string(), self.line, start_column)
                 }
-            }
+            },
             '*' => LexerToken::new(TokenType::Asterisk, "*".to_string(), self.line, start_column),
             '=' => {
                 if self.match_next('=') {
