@@ -6,7 +6,7 @@ function TokenTable({
     tableClassName = 'table table-striped table-bordered table-hover table-sm mb-0',
     // Añadimos position: 'relative' al wrapper para que el sticky header funcione correctamente dentro de él.
     // Añadimos un pequeño padding inferior para evitar que la última fila se corte.
-    wrapperStyle = { maxHeight: '340px', overflowY: 'auto', position: 'relative', paddingBottom: '1px' },
+    wrapperStyle = { maxHeight: '345px', overflowY: 'auto', position: 'relative', paddingBottom: '1px' },
     // Estilo para el encabezado, asegurando un fondo para cubrir el contenido al hacer scroll.
     headerStyle = { position: 'sticky', top: 0, zIndex: 1, backgroundColor: '#343a40' }, // Usando el color oscuro de thead-dark
     emptyMessage = 'No hay tokens para mostrar.'
@@ -40,7 +40,7 @@ function TokenTable({
             </thead>
             <tbody>
               {tokens.tokens.map((token, index) => {
-              if(token.tokenType !== "Invalid") {
+              if(token.tokenType !== "Invalid" && token.tokenType !== "CommentSingle" && token.tokenType !== "CommentMultiLine" && token.tokenType !== "NewLine") {
                 return (
                   <tr key={index}>
                     <td>{token.tokenType}</td>

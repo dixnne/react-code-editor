@@ -8,7 +8,6 @@ import ace from 'react-ace-builds/node_modules/ace-builds/src-noconflict/ace';
 // --- USA ace.require PARA OBTENER DEPENDENCIAS ---
 const TextHighlightRules = ace.require("ace/mode/text_highlight_rules").TextHighlightRules;
 const TextMode = ace.require("ace/mode/text").Mode;
-// const oop = ace.require("ace/lib/oop"); // No necesario al usar 'extends'
 // ---------------------------------------------
 
 // 1. Definición de las Reglas de Resaltado Actualizadas
@@ -24,13 +23,15 @@ export class DreamCHighlightRules extends TextHighlightRules {
         }, "identifier", true); // Color 2 por defecto
 
         const identifierRe = "[a-zA-Z_][a-zA-Z0-9_]*"; // Color 2
-        const numberRe = "(?:\\+|-)?(?:(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE](?:\\+|-)?\\d+)?i?|\\d+i)"; // Color 1
-        const arithmeticOperatorRe = "[\\+\\-\\*\\/]"; // Color 5: Solo simples +, -, *, /
-        const otherOperatorRe = "\\>\\=|\\<\\=|==|!=|&&|\\|\\||[\\!\\<\\>]"; // Color 6: Relacionales y Lógicos (!, <, >)
-        const assignmentOperatorRe = "="; // Color 6: Asignación simple
-        // *** NUEVA REGLA *** para asignación compuesta (+=, -=, *=, /=)
+        const numberRe = "(?:\\+|-)?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE](?:\\+|-)?\\d+)?"; // Color 1
+        // *** NUEVO: Regex para ++ y -- *** (Color 5)
+        const incrementDecrementRe = "\\+\\+|--";
+        const arithmeticOperatorRe = "[\\+\\-\\*\\/]"; // Color 5 (Solo simples)
+        const otherOperatorRe = "\\>\\=|\\<\\=|==|!=|&&|\\|\\||[\\!\\<\\>]"; // Color 6
+        const assignmentOperatorRe = "="; // Color 6
         const compoundAssignmentRe = "[\\+\\-\\*\\/]="; // Color 6
-        const stringRe = '"(?:[^\\"\\\\]|\\\\.)*"'; // Color 7
+        const singleQuoteStringRe = "'(?:[^'\\\\]|\\\\.)*'"; // Color 7
+        const doubleQuoteStringRe = '"(?:[^\\"\\\\]|\\\\.)*"'; // Color 7
         const specialOperatorRe = "(?:@\\*|\\.\\.\\.\\+|\\|>|->)"; // Color 8
 
 
@@ -41,7 +42,8 @@ export class DreamCHighlightRules extends TextHighlightRules {
                 { token: "comment.block.documentation", regex: "\\/\\*", next: "comment" },
 
                 // Color 7: Cadenas
-                { token: "string.quoted.double", regex: stringRe },
+                { token: "string.quoted.single", regex: singleQuoteStringRe },
+                { token: "string.quoted.double", regex: doubleQuoteStringRe },
 
                 // Color 1: Números
                 { token: "constant.numeric", regex: numberRe },
@@ -49,20 +51,23 @@ export class DreamCHighlightRules extends TextHighlightRules {
                 // Color 8: Operadores Especiales
                 { token: "keyword.operator.special", regex: specialOperatorRe },
 
-                // *** NUEVO: *** Asignación Compuesta (antes que otros operadores)
+                // Asignación Compuesta
                 { token: "keyword.operator.assignment", regex: compoundAssignmentRe }, // Color 6
 
-                // Color 6: Operadores Relacionales/Lógicos
-                { token: "keyword.operator.logical", regex: otherOperatorRe },
+                // *** NUEVO: Regla para ++ y -- (antes de operadores simples) ***
+                { token: "keyword.operator.arithmetic", regex: incrementDecrementRe }, // Color 5
 
-                // Color 6: Asignación Simple
-                { token: "keyword.operator.assignment", regex: assignmentOperatorRe },
+                // Operadores Relacionales/Lógicos
+                { token: "keyword.operator.logical", regex: otherOperatorRe }, // Color 6
 
-                // Color 5: Operadores Aritméticos Simples
-                { token: "keyword.operator.arithmetic", regex: arithmeticOperatorRe },
+                // Asignación Simple
+                { token: "keyword.operator.assignment", regex: assignmentOperatorRe }, // Color 6
 
-                // Color 4: Palabras Clave / Color 2: Identificadores
-                { token: keywordMapper, regex: identifierRe },
+                // Operadores Aritméticos Simples (+, -, *, /)
+                { token: "keyword.operator.arithmetic", regex: arithmeticOperatorRe }, // Color 5
+
+                // Palabras Clave / Identificadores
+                { token: keywordMapper, regex: identifierRe }, // Color 4 o 2
 
                 // Delimitadores y Puntuación
                 { token: "paren.lparen", regex: "[\\(]" },
@@ -93,4 +98,5 @@ export default class DreamCMode extends TextMode {
         this.blockComment = {start: "/*", end: "*/"};
     }
 }
+
 
