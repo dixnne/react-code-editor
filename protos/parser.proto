@@ -1,0 +1,39 @@
+syntax = "proto3";
+package parser;
+
+import "lexer.proto";
+
+service Parser {
+  rpc Parse (ParseRequest) returns (ParseResponse);
+  rpc ParseSource (ParseSourceRequest) returns (ParseResponse);
+}
+
+message ParseRequest {
+  repeated lexer.Token tokens = 1;
+}
+
+message ParseSourceRequest {
+  string source = 1;
+}
+
+message ParseResponse {
+  ASTNode ast = 1;
+  repeated ParserError errors = 2;
+}
+
+message ASTNode {
+  string node_type = 1;
+  string value = 2;
+  repeated ASTNode children = 3;
+  uint32 start_line = 4;
+  uint32 start_column = 5;
+  uint32 end_line = 6;
+  uint32 end_column = 7;
+}
+
+message ParserError {
+  string error_type = 1;
+  string message = 2;
+  uint32 line = 3;
+  uint32 column = 4;
+}

@@ -26,7 +26,9 @@ function App() {
     const fetchTokens = async () => {
       try {
         const result = await window.electron.runLexer(editorContent);
+        const result2 = await window.electron.runParser(editorContent);
         setTokens(result);
+        console.log("Parser Result:", result2);
         console.log("Tokens:", result);
       } catch (error) {
         console.error("Error fetching tokens:", error);

@@ -6,11 +6,44 @@ import icon from '../../resources/icon.png?asset';
 import protoLoader from '@grpc/proto-loader';
 import grpc from '@grpc/grpc-js';
 
-const PROTO_PATH = join(__dirname, '../../protos/compilador.proto');
-const packageDefinition = protoLoader.loadSync(PROTO_PATH);
-const lexerProto = grpc.loadPackageDefinition(packageDefinition).lexer;
-console.log('Lexer Proto:', lexerProto);
-const client = new lexerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
+// Define paths for both proto files
+const LEXER_PROTO_PATH = join(__dirname, '../../protos/lexer.proto');
+const PARSER_PROTO_PATH = join(__dirname, '../../protos/parser.proto');
+
+// Debug: Check if proto files exist
+console.log("Lexer proto path:", LEXER_PROTO_PATH);
+console.log("Lexer proto exists:", fs.existsSync(LEXER_PROTO_PATH));
+console.log("Parser proto path:", PARSER_PROTO_PATH);
+console.log("Parser proto exists:", fs.existsSync(PARSER_PROTO_PATH));
+
+// Load proto options
+const protoOptions = {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+  includeDirs: [join(__dirname, '../../protos')] // Include directory for imports
+};
+
+// Load both proto files
+const lexerPackageDefinition = protoLoader.loadSync(LEXER_PROTO_PATH, protoOptions);
+const parserPackageDefinition = protoLoader.loadSync(PARSER_PROTO_PATH, protoOptions);
+
+// Compile both protos
+const lexerCompiled = grpc.loadPackageDefinition(lexerPackageDefinition);
+const parserCompiled = grpc.loadPackageDefinition(parserPackageDefinition);
+
+console.log("Lexer packages:", Object.keys(lexerCompiled));
+console.log("Parser packages:", Object.keys(parserCompiled));
+
+// Access the services
+const lexerProto = lexerCompiled.lexer;
+const parserProto = parserCompiled.parser;
+
+// Create clients for both services
+const clientLexer = new lexerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
+const clientParser = new parserProto.Parser('localhost:50051', grpc.credentials.createInsecure());
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -131,12 +164,33 @@ ipcMain.handle("save-file-as", async (event, data) => {
 ipcMain.handle('run-lexer', async (_event, code) => {
   console.log("Received code for lexing:", code);
   return new Promise((resolve, reject) => {
-    client.Analyze({ input: code }, (err, response) => {
+    clientLexer.Analyze({ input: code }, (err, response) => {
       if (err) {
         console.error("gRPC Lexer Error:", err);
         reject(err.message);
       } else {
         console.log("gRPC Lexer Response:", response);
+        resolve(response);
+      }
+    });
+  });
+});
+
+ipcMain.handle('run-parser', async (_event, code) => {
+  console.log("Received code for parsing:", code);
+  return new Promise((resolve, reject) => {
+    // Fixed: Use correct method name and proper error handling
+    clientParser.ParseSource({ source: code }, (err, response) => {
+      if (err) {
+        console.error("gRPC Parser Error:", err);
+        console.error("Error details:", {
+          code: err.code,
+          message: err.message,
+          details: err.details
+        });
+        reject(err.message);
+      } else {
+        console.log("gRPC Parser Response:", response);
         resolve(response);
       }
     });
