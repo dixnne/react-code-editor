@@ -1,6 +1,7 @@
 use core::fmt;
 
-#[derive(Debug, PartialEq)]
+// --- Errores de Sintaxis ---
+#[derive(Debug, PartialEq, Clone)] // Añadido `Clone` para un mejor manejo de errores
 pub enum SyntaxError {
     UnexpectedToken(String, usize, usize),
     UnexpectedEndOfFile,
@@ -12,47 +13,48 @@ pub enum SyntaxError {
     MissingLoopVariable,
     MissingStructName,
     MissingFieldName,
-    // Add more error types as needed
 }
 
 impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             SyntaxError::UnexpectedToken(t, line, col) => 
-                write!(f, "Unexpected token '{}' at line {}, column {}", t, line, col),
+                write!(f, "Token inesperado '{}' en la línea {}, columna {}", t, line, col),
             SyntaxError::UnexpectedEndOfFile => 
-                write!(f, "Unexpected end of file"),
+                write!(f, "Final inesperado del archivo"),
             SyntaxError::InvalidAssignmentTarget => 
-                write!(f, "Invalid assignment target"),
+                write!(f, "El objetivo de la asignación no es válido"),
             SyntaxError::MissingSemicolon => 
-                write!(f, "Missing semicolon"),
+                write!(f, "Falta punto y coma"),
             SyntaxError::MissingColon => 
-                write!(f, "Missing colon"),
+                write!(f, "Faltan dos puntos"),
             SyntaxError::MissingType => 
-                write!(f, "Missing type annotation"),
+                write!(f, "Falta anotación de tipo"),
             SyntaxError::MissingInKeyword => 
-                write!(f, "Expected 'in' keyword in for loop"),
+                write!(f, "Se esperaba la palabra clave 'in' en el bucle 'for'"),
             SyntaxError::MissingLoopVariable => 
-                write!(f, "Expected loop variable in for statement"),
+                write!(f, "Se esperaba una variable en el bucle 'for'"),
             SyntaxError::MissingStructName => 
-                write!(f, "Expected struct name after 'struct' keyword"),
+                write!(f, "Se esperaba un nombre de struct después de la palabra clave 'struct'"),
             SyntaxError::MissingFieldName => 
-                write!(f, "Expected field name in struct declaration"),
+                write!(f, "Se esperaba un nombre de campo en la declaración del struct"),
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
+
+// --- Tipos y Nodos del AST ---
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Int,
     Float,
     String,
     Bool,
-    // Add more types as needed
+    Void, 
 }
 
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Identifier {
     pub name: String,
     pub line: usize,
@@ -76,21 +78,23 @@ pub enum Expression {
         target: Identifier,
         value: Box<Expression>,
     },
-    Postfix {
-        expr: Box<Expression>,
-        op: PostfixOp,
-    },
     Grouped(Box<Expression>),
     FunctionCall {
         function: Box<Expression>,
         arguments: Vec<Expression>,
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum ElseBranch {
-    If(Box<IfStatement>),
-    Block(Box<Statement>),
+    },
+    // --- NUEVAS VARIANTES DE EXPRESIÓN ---
+    Array(Vec<Expression>),
+    Object(Vec<(Identifier, Expression)>),
+    Splat(Box<Expression>),
+    StructInstantiation {
+        name: Identifier,
+        fields: Vec<(Identifier, Expression)>,
+    },
+    MemberAccess {
+        object: Box<Expression>,
+        property: Identifier,
+    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -103,41 +107,54 @@ pub enum Literal {
 
 #[derive(Debug, PartialEq)]
 pub enum BinaryOp {
+    // Aritméticos
     Plus,
     Minus,
     Asterisk,
     Slash,
+    // Relacionales
     Greater,
     Less,
+    GreaterEqual,
+    LessEqual,
     DoubleEqual,
     NotEqual,
+    // Lógicos
     DoubleAmpersand,
     DoubleBar,
-    GreaterEqual,
-    LessEqual
-    // Add more binary operators
+    // --- NUEVOS OPERADORES ---
+    Pipe,   // |>
+    Spread, // ...+
+    Swap,   // <=>
 }
 
 #[derive(Debug, PartialEq)]
 pub enum UnaryOp {
     Minus,
     Exclamation,
-    // Add more unary operators
 }
 
 #[derive(Debug, PartialEq)]
-pub enum PostfixOp {
-    Increment,
-    Decrement,
+pub enum Statement {
+    // Se elimina VariableDeclaration de aquí para evitar redundancia con Declaration
+    Expression(Expression),
+    Return(ReturnStatement),
+    If(IfStatement),
+    Block(Block),
+    While(WhileStatement), 
+    For(ForStatement),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct VariableDeclaration {
-    pub identifier: Identifier,
-    pub var_type: Option<Type>,
-    pub value: Expression,
+pub struct Block {
+    pub statements: Vec<Declaration>, // Un bloque puede tener declaraciones y sentencias
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ElseBranch {
+    If(Box<IfStatement>),
+    Block(Box<Statement>),
+}
 
 #[derive(Debug, PartialEq)]
 pub struct ReturnStatement {
@@ -152,8 +169,42 @@ pub struct IfStatement {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Block {
-    pub statements: Vec<Statement>,
+pub struct WhileStatement {
+    pub condition: Expression,
+    pub body: Block,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ForStatement {
+    pub variable: Identifier,
+    pub iterable: Expression,
+    pub body: Block,
+}
+
+// --- Declaraciones de Alto Nivel ---
+
+#[derive(Debug, PartialEq)]
+pub enum Declaration {
+    Function(Function),
+    Variable(VariableDeclaration),
+    Struct(StructDeclaration),
+    // --- NUEVAS VARIANTES DE DECLARACIÓN ---
+    Constant(ConstantDeclaration),
+    Statement(Statement), // Para permitir sentencias en el nivel superior
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantDeclaration {
+    pub identifier: Identifier,
+    pub const_type: Option<Type>,
+    pub value: Expression,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct VariableDeclaration {
+    pub identifier: Identifier,
+    pub var_type: Option<Type>,
+    pub value: Expression,
 }
 
 #[derive(Debug, PartialEq)]
@@ -170,20 +221,6 @@ pub struct Parameter {
     pub param_type: Type,
 }
 
-
-#[derive(Debug, PartialEq)]
-pub struct WhileStatement {
-    pub condition: Expression,
-    pub body: Block,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ForStatement {
-    pub variable: Identifier,
-    pub iterable: Expression,
-    pub body: Block,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct StructDeclaration {
     pub name: Identifier,
@@ -196,24 +233,7 @@ pub struct FieldDeclaration {
     pub field_type: Type,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Declaration {
-    Function(Function),
-    Variable(VariableDeclaration),
-    Struct(StructDeclaration),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Statement {
-    VariableDeclaration(VariableDeclaration),
-    Expression(Expression),
-    Return(ReturnStatement),
-    If(IfStatement),
-    Block(Block),
-    While(WhileStatement), 
-    For(ForStatement),
-    // Add more statement types
-}
+// --- Raíz del AST y Resultado del Parseo ---
 
 #[derive(Debug, PartialEq)]
 pub struct Program {

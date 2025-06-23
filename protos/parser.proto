@@ -1,5 +1,5 @@
 syntax = "proto3";
-package parser;
+package compiler;
 
 import "lexer.proto";
 
@@ -9,7 +9,7 @@ service Parser {
 }
 
 message ParseRequest {
-  repeated lexer.Token tokens = 1;
+  repeated Token tokens = 1;
 }
 
 message ParseSourceRequest {

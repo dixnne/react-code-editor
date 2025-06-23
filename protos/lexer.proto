@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package lexer;
+package compiler;
 
 service Lexer {
   rpc Analyze(AnalyzeRequest) returns (TokenList);

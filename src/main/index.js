@@ -6,44 +6,57 @@ import icon from '../../resources/icon.png?asset';
 import protoLoader from '@grpc/proto-loader';
 import grpc from '@grpc/grpc-js';
 
+// --- INICIO DE LA SECCIÓN CORREGIDA ---
+
 // Define paths for both proto files
 const LEXER_PROTO_PATH = join(__dirname, '../../protos/lexer.proto');
 const PARSER_PROTO_PATH = join(__dirname, '../../protos/parser.proto');
 
-// Debug: Check if proto files exist
-console.log("Lexer proto path:", LEXER_PROTO_PATH);
-console.log("Lexer proto exists:", fs.existsSync(LEXER_PROTO_PATH));
-console.log("Parser proto path:", PARSER_PROTO_PATH);
-console.log("Parser proto exists:", fs.existsSync(PARSER_PROTO_PATH));
-
-// Load proto options
+// Opciones de carga del proto
 const protoOptions = {
   keepCase: true,
   longs: String,
   enums: String,
   defaults: true,
   oneofs: true,
-  includeDirs: [join(__dirname, '../../protos')] // Include directory for imports
+  includeDirs: [join(__dirname, '../../protos')] // Directorio para buscar `import`
 };
 
-// Load both proto files
-const lexerPackageDefinition = protoLoader.loadSync(LEXER_PROTO_PATH, protoOptions);
-const parserPackageDefinition = protoLoader.loadSync(PARSER_PROTO_PATH, protoOptions);
+// Carga AMBAS definiciones de proto en un solo paso
+const packageDefinition = protoLoader.loadSync(
+  [LEXER_PROTO_PATH, PARSER_PROTO_PATH],
+  protoOptions
+);
 
-// Compile both protos
-const lexerCompiled = grpc.loadPackageDefinition(lexerPackageDefinition);
-const parserCompiled = grpc.loadPackageDefinition(parserPackageDefinition);
 
-console.log("Lexer packages:", Object.keys(lexerCompiled));
-console.log("Parser packages:", Object.keys(parserCompiled));
+// --- LÍNEAS DE DEPURACIÓN MEJORADAS ---
+// 1. Cargar el objeto gRPC
+const loadedGrpcObject = grpc.loadPackageDefinition(packageDefinition);
+// 2. Imprimir los nombres de los paquetes que gRPC encontró
+console.log("Paquetes cargados por gRPC:", Object.keys(loadedGrpcObject));
 
-// Access the services
-const lexerProto = lexerCompiled.lexer;
-const parserProto = parserCompiled.parser;
 
-// Create clients for both services
-const clientLexer = new lexerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
-const clientParser = new parserProto.Parser('localhost:50051', grpc.credentials.createInsecure());
+// 3. Acceder al paquete 'compiler'
+const compilerProto = loadedGrpcObject.compiler;
+
+// 4. Añadir una verificación explícita para dar un error claro
+if (!compilerProto) {
+    console.error("ERROR FATAL: El paquete 'compiler' no se encontró en los archivos .proto cargados.");
+    console.error("Esto suele ocurrir por un problema de caché o de configuración.");
+    console.error("Asegúrese de que ambos archivos .proto comienzan con 'package compiler;' y que ha limpiado los directorios 'out' y 'target'.");
+    console.error("Paquetes que sí se encontraron:", Object.keys(loadedGrpcObject));
+    app.quit(); // Salir de la aplicación si no se puede cargar el proto
+}
+
+
+// Crea los clientes desde el paquete 'compiler' unificado
+const clientLexer = new compilerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
+const clientParser = new compilerProto.Parser('localhost:50051', grpc.credentials.createInsecure());
+
+console.log("Servicios gRPC cargados desde el paquete 'compiler' y listos.");
+
+// --- FIN DE LA SECCIÓN CORREGIDA ---
+
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -98,6 +111,8 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+// --- Manejadores de IPC (sin cambios) ---
 
 ipcMain.handle("open-file", async () => {
   const { filePaths, canceled } = await dialog.showOpenDialog({
@@ -179,7 +194,6 @@ ipcMain.handle('run-lexer', async (_event, code) => {
 ipcMain.handle('run-parser', async (_event, code) => {
   console.log("Received code for parsing:", code);
   return new Promise((resolve, reject) => {
-    // Fixed: Use correct method name and proper error handling
     clientParser.ParseSource({ source: code }, (err, response) => {
       if (err) {
         console.error("gRPC Parser Error:", err);

@@ -40,10 +40,10 @@ function TokenTable({
             </thead>
             <tbody>
               {tokens.tokens.map((token, index) => {
-              if(token.tokenType !== "Invalid" && token.tokenType !== "CommentSingle" && token.tokenType !== "CommentMultiLine" && token.tokenType !== "NewLine") {
+              if(token.token_type !== "Invalid" && token.tokenType !== "CommentSingle" && token.tokenType !== "CommentMultiLine" && token.tokenType !== "NewLine") {
                 return (
                   <tr key={index}>
-                    <td>{token.tokenType}</td>
+                    <td>{token.token_type}</td>
                     <td>{token.lexeme}</td>
                     <td>{token.line}</td>
                     <td>{token.column}</td>

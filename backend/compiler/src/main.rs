@@ -1,19 +1,15 @@
 mod ast;
-mod grpc_lexer;
-mod grpc_parser;
+mod grpc_services;
 mod lexer;
 mod parser;
 mod token;
 mod reflection; // <-- Add this
 
-use crate::grpc_lexer::lexer::lexer_server::LexerServer;
-use crate::grpc_lexer::{LexerService};
-use crate::grpc_parser::ParserService;
+use crate::grpc_services::{LexerService, ParserService, compiler::lexer_server::LexerServer, compiler::parser_server::ParserServer};
 use crate::lexer::LexicalAnalyzer;
 use crate::parser::parse_tokens;
 use crate::token::{LexerToken, TokenType};
 use tonic::transport::Server;
-use crate::grpc_parser::parser::parser_server::ParserServer;
 use reflection::FILE_DESCRIPTOR_SET;
 
 fn create_tokens(source: &str) -> Vec<LexerToken> {
