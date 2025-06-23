@@ -1,0 +1,50 @@
+---
+source: tests/integration_tests.rs
+expression: tests/cases/01_simple_let.dreamc
+---
+Program {
+    declarations: [
+        Variable(
+            VariableDeclaration {
+                identifier: Identifier {
+                    name: "a",
+                    line: 2,
+                    column: 5,
+                },
+                var_type: Some(
+                    Int,
+                ),
+                value: Literal(
+                    Int(
+                        10,
+                    ),
+                ),
+            },
+        ),
+        Variable(
+            VariableDeclaration {
+                identifier: Identifier {
+                    name: "b",
+                    line: 3,
+                    column: 5,
+                },
+                var_type: None,
+                value: Binary {
+                    left: Identifier(
+                        Identifier {
+                            name: "a",
+                            line: 3,
+                            column: 9,
+                        },
+                    ),
+                    op: Plus,
+                    right: Literal(
+                        Int(
+                            5,
+                        ),
+                    ),
+                },
+            },
+        ),
+    ],
+}

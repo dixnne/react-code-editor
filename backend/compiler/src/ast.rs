@@ -61,7 +61,7 @@ pub struct Identifier {
     pub column: usize,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Identifier(Identifier),
     Literal(Literal),
@@ -75,7 +75,7 @@ pub enum Expression {
         expr: Box<Expression>,
     },
     Assignment {
-        target: Identifier,
+        target: Box<Expression>, // <-- Cambiado a Box<Expression>
         value: Box<Expression>,
     },
     Grouped(Box<Expression>),
@@ -97,7 +97,7 @@ pub enum Expression {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Int(i64),
     Float(f64),
@@ -105,7 +105,7 @@ pub enum Literal {
     Bool(bool),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinaryOp {
     // Aritméticos
     Plus,
@@ -128,13 +128,13 @@ pub enum BinaryOp {
     Swap,   // <=>
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum UnaryOp {
     Minus,
     Exclamation,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     // Se elimina VariableDeclaration de aquí para evitar redundancia con Declaration
     Expression(Expression),
@@ -145,36 +145,36 @@ pub enum Statement {
     For(ForStatement),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Block {
     pub statements: Vec<Declaration>, // Un bloque puede tener declaraciones y sentencias
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ElseBranch {
     If(Box<IfStatement>),
     Block(Box<Statement>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ReturnStatement {
     pub value: Expression,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IfStatement {
     pub condition: Expression,
     pub then_block: Block,
     pub else_block: Option<ElseBranch>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct WhileStatement {
     pub condition: Expression,
     pub body: Block,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ForStatement {
     pub variable: Identifier,
     pub iterable: Expression,
@@ -183,7 +183,7 @@ pub struct ForStatement {
 
 // --- Declaraciones de Alto Nivel ---
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Declaration {
     Function(Function),
     Variable(VariableDeclaration),
@@ -193,21 +193,21 @@ pub enum Declaration {
     Statement(Statement), // Para permitir sentencias en el nivel superior
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ConstantDeclaration {
     pub identifier: Identifier,
     pub const_type: Option<Type>,
     pub value: Expression,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct VariableDeclaration {
     pub identifier: Identifier,
     pub var_type: Option<Type>,
     pub value: Expression,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Function {
     pub name: Identifier,
     pub parameters: Vec<Parameter>,
@@ -215,19 +215,19 @@ pub struct Function {
     pub body: Block,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Parameter {
     pub name: Identifier,
     pub param_type: Type,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct StructDeclaration {
     pub name: Identifier,
     pub fields: Vec<FieldDeclaration>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FieldDeclaration {
     pub name: Identifier,
     pub field_type: Type,
@@ -235,7 +235,7 @@ pub struct FieldDeclaration {
 
 // --- Raíz del AST y Resultado del Parseo ---
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Program {
     pub declarations: Vec<Declaration>,
 }

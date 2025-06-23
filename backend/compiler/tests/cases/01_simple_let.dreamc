@@ -1,0 +1,3 @@
+// tests/cases/01_simple_let.dreamc
+let a: int = 10;
+let b = a + 5;

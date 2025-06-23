@@ -3,6 +3,17 @@ name = "compiler"
 version = "0.1.0"
 edition = "2024"
 
+
+# Esta sección define tu biblioteca.
+[lib]
+name = "compiler"
+path = "src/lib.rs"
+
+# Esta sección define tu ejecutable.
+[[bin]]
+name = "compiler"
+path = "src/main.rs"
+
 [dependencies]
 prost = "0.13.5"
 tonic = { version = "0.12.0"}
@@ -11,3 +22,6 @@ tonic-reflection = "0.12.0"
 
 [build-dependencies]
 tonic-build = "0.10"
+
+[dev-dependencies]
+insta = { version = "1.34.0", features = ["yaml", "glob"] }

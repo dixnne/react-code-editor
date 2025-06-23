@@ -1,17 +1,18 @@
 // Este archivo ahora sirve como el punto central para tus servicios gRPC.
 
-use crate::ast::*;
-use crate::lexer::LexicalAnalyzer;
-use crate::parser::parse_tokens;
-use crate::token::{LexerToken, TokenType};
-use tonic::{Request, Response, Status};
+// Usa el nombre del crate "compiler" con el prefijo `::` para una ruta absoluta.
+use ::compiler::ast::*;
+use ::compiler::lexer::LexicalAnalyzer;
+use ::compiler::parser::parse_tokens;
+use ::compiler::token::{LexerToken, TokenType};
 
+// Imports de tonic y del código proto generado
+use tonic::{Request, Response, Status};
 pub mod compiler {
     tonic::include_proto!("compiler");
 }
-
 use compiler::{
-    lexer_server::{Lexer, LexerServer},
+    lexer_server::{Lexer, LexerServer}, // Se importan aquí aunque se usen en main
     parser_server::{Parser, ParserServer},
     AnalyzeRequest, AstNode, ParseRequest, ParseResponse, ParserError, Token, TokenList,
     ParseSourceRequest,
@@ -115,7 +116,6 @@ fn statement_to_proto(stmt: &Statement) -> AstNode {
     }
 }
 
-// CORREGIDO: Se añade el caso para MemberAccess
 fn expression_to_proto(expr: &Expression) -> AstNode {
      match expr {
         Expression::Identifier(id) => identifier_to_proto(id),
@@ -133,80 +133,52 @@ fn expression_to_proto(expr: &Expression) -> AstNode {
     }
 }
 
-// --- NUEVA FUNCIÓN ---
 fn member_access_to_proto(object: &Expression, property: &Identifier) -> AstNode {
     AstNode {
-        node_type: "MemberAccess".to_string(),
-        value: ".".to_string(),
-        children: vec![
-            expression_to_proto(object),
-            identifier_to_proto(property),
-        ],
+        node_type: "MemberAccess".to_string(), value: ".".to_string(),
+        children: vec![expression_to_proto(object), identifier_to_proto(property)],
         ..Default::default()
     }
 }
-
-
-// --- Implementaciones Detalladas ---
 
 fn function_to_proto(func: &Function) -> AstNode {
     let params_node = AstNode {
         node_type: "Parameters".to_string(),
         children: func.parameters.iter().map(|p| {
-            let mut param_children = vec![identifier_to_proto(&p.name)];
-            param_children.push(type_to_proto(&p.param_type));
-            AstNode { node_type: "Parameter".to_string(), children: param_children, ..Default::default() }
+            AstNode { 
+                node_type: "Parameter".to_string(), 
+                children: vec![identifier_to_proto(&p.name), type_to_proto(&p.param_type)], 
+                ..Default::default() 
+            }
         }).collect(),
         ..Default::default()
     };
     AstNode {
-        node_type: "Function".to_string(),
-        value: func.name.name.clone(),
-        children: vec![
-            params_node,
-            type_to_proto(&func.return_type),
-            block_to_proto(&func.body),
-        ],
-        start_line: func.name.line as u32,
-        start_column: func.name.column as u32,
+        node_type: "Function".to_string(), value: func.name.name.clone(),
+        children: vec![params_node, type_to_proto(&func.return_type), block_to_proto(&func.body)],
+        start_line: func.name.line as u32, start_column: func.name.column as u32,
         ..Default::default()
     }
 }
 
 fn variable_decl_to_proto(decl: &VariableDeclaration) -> AstNode {
-    let mut children = vec![
-        identifier_to_proto(&decl.identifier),
-    ];
-    if let Some(t) = &decl.var_type {
-        children.push(type_to_proto(t));
-    }
+    let mut children = vec![identifier_to_proto(&decl.identifier)];
+    if let Some(t) = &decl.var_type { children.push(type_to_proto(t)); }
     children.push(expression_to_proto(&decl.value));
-    
     AstNode {
-        node_type: "VariableDeclaration".to_string(),
-        value: "let".to_string(),
-        children,
-        start_line: decl.identifier.line as u32,
-        start_column: decl.identifier.column as u32,
+        node_type: "VariableDeclaration".to_string(), value: "let".to_string(), children,
+        start_line: decl.identifier.line as u32, start_column: decl.identifier.column as u32,
         ..Default::default()
     }
 }
 
 fn constant_decl_to_proto(decl: &ConstantDeclaration) -> AstNode {
-    let mut children = vec![
-        identifier_to_proto(&decl.identifier),
-    ];
-    if let Some(t) = &decl.const_type {
-        children.push(type_to_proto(t));
-    }
+    let mut children = vec![identifier_to_proto(&decl.identifier)];
+    if let Some(t) = &decl.const_type { children.push(type_to_proto(t)); }
     children.push(expression_to_proto(&decl.value));
-
     AstNode {
-        node_type: "ConstantDeclaration".to_string(),
-        value: "const".to_string(),
-        children,
-        start_line: decl.identifier.line as u32,
-        start_column: decl.identifier.column as u32,
+        node_type: "ConstantDeclaration".to_string(), value: "const".to_string(), children,
+        start_line: decl.identifier.line as u32, start_column: decl.identifier.column as u32,
         ..Default::default()
     }
 }
@@ -224,11 +196,9 @@ fn struct_decl_to_proto(decl: &StructDeclaration) -> AstNode {
         ..Default::default()
     };
     AstNode {
-        node_type: "StructDeclaration".to_string(),
-        value: decl.name.name.clone(),
+        node_type: "StructDeclaration".to_string(), value: decl.name.name.clone(),
         children: vec![fields_node],
-        start_line: decl.name.line as u32,
-        start_column: decl.name.column as u32,
+        start_line: decl.name.line as u32, start_column: decl.name.column as u32,
         ..Default::default()
     }
 }
@@ -242,10 +212,7 @@ fn return_stmt_to_proto(ret: &ReturnStatement) -> AstNode {
 }
 
 fn if_stmt_to_proto(if_stmt: &IfStatement) -> AstNode {
-    let mut children = vec![
-        expression_to_proto(&if_stmt.condition),
-        block_to_proto(&if_stmt.then_block),
-    ];
+    let mut children = vec![expression_to_proto(&if_stmt.condition), block_to_proto(&if_stmt.then_block)];
     if let Some(else_branch) = &if_stmt.else_block {
         let else_node = match else_branch {
             ElseBranch::If(nested_if) => if_stmt_to_proto(nested_if),
@@ -267,11 +234,7 @@ fn while_stmt_to_proto(while_stmt: &WhileStatement) -> AstNode {
 fn for_stmt_to_proto(for_stmt: &ForStatement) -> AstNode {
     AstNode {
         node_type: "For".to_string(),
-        children: vec![
-            identifier_to_proto(&for_stmt.variable),
-            expression_to_proto(&for_stmt.iterable),
-            block_to_proto(&for_stmt.body),
-        ],
+        children: vec![identifier_to_proto(&for_stmt.variable), expression_to_proto(&for_stmt.iterable), block_to_proto(&for_stmt.body)],
         start_line: for_stmt.variable.line as u32, start_column: for_stmt.variable.column as u32,
         ..Default::default()
     }
@@ -296,11 +259,9 @@ fn literal_to_proto(lit: &Literal) -> AstNode {
     AstNode { node_type: node_type.to_string(), value, ..Default::default() }
 }
 
-// CORREGIDO: Se añade el caso para `Void`
 fn type_to_proto(ty: &Type) -> AstNode {
     let type_str = match ty {
-        Type::Int => "int", Type::Float => "float", Type::String => "string", Type::Bool => "bool",
-        Type::Void => "void",
+        Type::Int => "int", Type::Float => "float", Type::String => "string", Type::Bool => "bool", Type::Void => "void",
     };
     AstNode { node_type: "Type".to_string(), value: type_str.to_string(), ..Default::default() }
 }
@@ -321,11 +282,11 @@ fn unary_expr_to_proto(op: &UnaryOp, expr: &Expression) -> AstNode {
     }
 }
 
-fn assignment_to_proto(target: &Identifier, value: &Expression) -> AstNode {
+// --- FUNCIÓN CORREGIDA ---
+fn assignment_to_proto(target: &Expression, value: &Expression) -> AstNode {
     AstNode {
         node_type: "Assignment".to_string(), value: "=".to_string(),
-        children: vec![identifier_to_proto(target), expression_to_proto(value)],
-        start_line: target.line as u32, start_column: target.column as u32,
+        children: vec![expression_to_proto(target), expression_to_proto(value)],
         ..Default::default()
     }
 }
@@ -341,10 +302,7 @@ fn grouped_expr_to_proto(expr: &Expression) -> AstNode {
 fn func_call_to_proto(function: &Expression, arguments: &[Expression]) -> AstNode {
     AstNode {
         node_type: "FunctionCall".to_string(),
-        children: vec![expression_to_proto(function)]
-            .into_iter()
-            .chain(arguments.iter().map(expression_to_proto))
-            .collect(),
+        children: vec![expression_to_proto(function)].into_iter().chain(arguments.iter().map(expression_to_proto)).collect(),
         ..Default::default()
     }
 }
@@ -379,8 +337,7 @@ fn splat_to_proto(expr: &Expression) -> AstNode {
 
 fn struct_inst_to_proto(name: &Identifier, fields: &[(Identifier, Expression)]) -> AstNode {
      AstNode {
-        node_type: "StructInstantiation".to_string(),
-        value: name.name.clone(),
+        node_type: "StructInstantiation".to_string(), value: name.name.clone(),
         children: fields.iter().map(|(key, val)| AstNode {
             node_type: "StructFieldInit".to_string(),
             children: vec![identifier_to_proto(key), expression_to_proto(val)],

@@ -1,0 +1,5 @@
+// tests/cases/03_syntax_error.dreamc
+let x: int = 10;
+fn my_func() -> void {
+    let y =; // <-- Error de sintaxis aquí
+}
