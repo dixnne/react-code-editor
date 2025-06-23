@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 
-const TreeNode = ({ node, depth = 0 }) => {
+const TreeNode = ({ node, depth = 0, wrapperStyle = { maxHeight: '332px', overflowY: 'auto', position: 'relative', paddingBottom: '1px' } }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = node.children && node.children.length > 0;
   
   return (
-    <div className="tree-node" style={{ marginLeft: `${depth * 15}px` }}>
+    <div className="tree-node" style={ wrapperStyle }>
       <div 
         className="node-card"
         onClick={() => hasChildren && setIsExpanded(!isExpanded)}
+        role='button'
       >
         <div className="node-header">
           {hasChildren && (
