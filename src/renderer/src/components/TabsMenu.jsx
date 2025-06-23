@@ -3,8 +3,9 @@ import "bootstrap-icons/font/bootstrap-icons.css";
 import { useState } from "react";
 import Themes from "../assets/themes.js";
 import TokenTable from "./TokenTable.jsx";
+import TreeView from './TreeView.jsx';
 
-function TabsMenu({tokens, theme}){
+function TabsMenu({tokens, syntax, theme}){
     const [active, setActive] = useState(0)
 
     function handleClick(act) {
@@ -18,7 +19,9 @@ function TabsMenu({tokens, theme}){
                     <TokenTable tokens={tokens} />
                 </Box>
             case 1:
-                return <Box height="100%" bg={Themes[theme].background}>Syntactic Analysis</Box>
+                return <Box height="100%" bg={Themes[theme].background}>
+                        <TreeView data ={syntax}></TreeView>
+                    </Box>
             case 2:
                 return <Box height="100%" bg={Themes[theme].background}>Semantic Analysis</Box>
             case 3:

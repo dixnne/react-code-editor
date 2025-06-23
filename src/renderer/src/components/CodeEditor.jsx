@@ -1,40 +1,22 @@
 import { Box, HStack, Stack } from "@chakra-ui/react";
 import AceEditor from "react-ace-builds";
-// Importa useRef y useEffect
 import React, { useState, useEffect, useRef } from "react";
 
-// --- IMPORTACIONES ACE ---
-// Importa el TEMA y las EXTENSIONES que necesites
 import "react-ace-builds/node_modules/ace-builds/src-noconflict/theme-dracula";
 import "react-ace-builds/node_modules/ace-builds/src-noconflict/ext-language_tools";
-// NO importes ningún modo aquí (ni c_cpp ni dreamc)
-
-// --- IMPORTA TU MODO PERSONALIZADO ---
-// Ajusta la ruta si es diferente
-import DreamCMode from "../ace/mode/dreamc_mode"; // Asegúrate que este archivo use imports ES6 ahora
-// --------------------------------------
-
+import DreamCMode from "../ace/mode/dreamc_mode";
 import TabsMenu from "./TabsMenu";
 import Themes from "../assets/themes.js";
 
-function CodeEditor({ action, theme, tokens, onContentChange }) {
-    const [editorContent, setEditorContent] = useState(
-        ''
-    );
+function CodeEditor({ action, theme, tokens, syntax, onContentChange }) {
+    const [editorContent, setEditorContent] = useState('');
     const [filePath, setFilePath] = useState(null);
     const [line, setLine] = useState(1);
     const [column, setColumn] = useState(1);
     const [active, setActive] = useState(0);
 
-    // --- REFERENCIA AL EDITOR ---
     const aceEditorRef = useRef(null);
-    // --------------------------
 
-    function handleClick(act) {
-        setActive(act);
-    }
-
-    // --- EFECTO PARA CONFIGURAR EL MODO ---
     useEffect(() => {
         if (aceEditorRef.current) {
             const editor = aceEditorRef.current.editor;
@@ -46,9 +28,7 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
             console.warn("Referencia a AceEditor no encontrada en useEffect.");
         }
     }, []);
-    // ------------------------------------
 
-    // --- Lógica de manejo de archivos (sin cambios) ---
     useEffect(() => {
          const electronAPI = window.electron;
          const runAction = async () => {
@@ -62,7 +42,7 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
     }, [action]);
 
     const newFile = () => {
-        setEditorContent("// Nuevo archivo DreamC\n"); // Contenido inicial para DreamC
+        setEditorContent("// Nuevo archivo DreamC\n");
         setFilePath(null);
         setLine(1); setColumn(1);
     };
@@ -77,7 +57,7 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
         if (!electronAPI) return console.warn("Electron API not available.");
         try {
             const result = await electronAPI.openFile();
-            if (result && typeof result.content === 'string' && typeof result.path === 'string') { // Verifica tipos
+            if (result && typeof result.content === 'string' && typeof result.path === 'string') {
                 setEditorContent(result.content);
                 setFilePath(result.path);
                 setLine(1); setColumn(1);
@@ -109,7 +89,6 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
             } else { console.error("Failed to save file as."); }
         } catch (error) { console.error("Error saving file as:", error); }
     };
-    // --- Fin Lógica de manejo de archivos ---
 
     const handleChange = (value) => {
         setEditorContent(value);
@@ -119,7 +98,6 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
     };
 
     const handleCursorChange = (selection) => {
-        // Añadir verificación por si selection o getCursor no existen brevemente
         if (selection && typeof selection.getCursor === 'function') {
             const cursorPosition = selection.getCursor();
             if (cursorPosition) {
@@ -129,7 +107,6 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
         }
     };
 
-     // Definir colores/temas para el resto de la UI si es necesario
     const currentThemeUI = Themes && Themes[theme] ? Themes[theme] : { primary: '#343a40', secondary: '#6c757d', tertiary: '#e9ecef', secondarySemi: '#495057' };
 
     function printLexicalErrors(t) {
@@ -137,25 +114,48 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
         return (
             t.map((token, index) => (
                 token.tokenType === "Invalid" ? (
-                    <p>Error: Invalid token "{token.lexeme}" at line {token.line} col {token.column}</p>
-                ) : (
-                    ""
-                )
-            )
+                    <p key={index}>Error: Invalid token "{token.lexeme}" at line {token.line} col {token.column}</p>
+                ) : null
+            ))
+        );
+    }
+
+    // NEW FUNCTION: Print syntax errors
+    function printSyntaxErrors(errors) {
+        if (!errors || errors.length === 0) {
+            return <div>No hay errores de sintaxis.</div>;
+        }
+        
+        return errors.map((error, index) => (
+            <p key={index}>
+                Error: {error.error_type} - "{error.message}" at line {error.line} col {error.column}
+            </p>
         ));
     }
 
     function renderActiveWindow(active) {
         switch (active) {
-            case 0:
-                return <Box overflowY="auto" maxH="150px" px={3} bg={currentThemeUI.primary}>
-                    {printLexicalErrors(tokens.tokens)}
-                </Box>;
-            case 1:
+            case 0: // Lexical errors
+                return (
+                    <Box overflowY="auto" maxH="150px" px={3} bg={currentThemeUI.primary}>
+                        {printLexicalErrors(tokens.tokens)}
+                    </Box>
+                );
+            case 1: // Syntax errors (NEW TAB)
+                return (
+                    <Box overflowY="auto" maxH="150px" px={3} bg={currentThemeUI.primary}>
+                        {printSyntaxErrors(syntax?.errors)}
+                    </Box>
+                );
+            case 2: // Execution
                 return <Box px={3} height="100%" bg={currentThemeUI.primary}>Execution</Box>;
             default:
                 return <Box height="100%" bg={currentThemeUI.primary}></Box>;
         }
+    }
+
+    function handleClick(act) {
+        setActive(act);
     }
 
     return (
@@ -166,8 +166,8 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
                         ref={aceEditorRef}
                         width="55vw"
                         height="100%"
-                        mode="text" // Inicia en modo texto, se cambiará en useEffect
-                        theme="dracula" // O tu tema preferido
+                        mode="text"
+                        theme="dracula"
                         onChange={handleChange}
                         value={editorContent}
                         name="DREAMC_EDITOR"
@@ -191,17 +191,33 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
                     </HStack>
                 </Stack>
                 <Box w="50vw" h="100%" bg={currentThemeUI.secondarySemi}>
-                    <TabsMenu tokens={tokens} theme={theme} />
+                    <TabsMenu tokens={tokens} syntax={syntax} theme={theme} />
                 </Box>
             </HStack>
             <Stack height="100%" bg={currentThemeUI.primary}>
                 <Box color="white" bg={currentThemeUI.secondary} px={4} py={2}>
                     <ul className="nav">
                         <li className="nav-item">
-                            <a className={"nav-link link-light " + (active==0? "rounded bg-light text-dark" : "")} role="button" onClick={() => handleClick(0)}>Errors</a>
+                            <a className={"nav-link link-light " + (active === 0 ? "rounded bg-light text-dark" : "")} 
+                               role="button" 
+                               onClick={() => handleClick(0)}>
+                                Lexical
+                            </a>
+                        </li>
+                        {/* NEW SYNTAX ERRORS TAB */}
+                        <li className="nav-item">
+                            <a className={"nav-link link-light " + (active === 1 ? "rounded bg-light text-dark" : "")} 
+                               role="button" 
+                               onClick={() => handleClick(1)}>
+                                Syntax
+                            </a>
                         </li>
                         <li className="nav-item">
-                            <a className={"nav-link link-light " + (active==1? "rounded bg-light text-dark" : "")} role="button" onClick={() => handleClick(1)}>Execution</a>
+                            <a className={"nav-link link-light " + (active === 2 ? "rounded bg-light text-dark" : "")} 
+                               role="button" 
+                               onClick={() => handleClick(2)}>
+                                Execution
+                            </a>
                         </li>
                     </ul>
                 </Box>
@@ -209,7 +225,6 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
                     {renderActiveWindow(active)}
                 </Box>
                 <HStack justifyContent="end" bg={currentThemeUI.tertiary} color="black" px={4} py={2}>
-                    {/* *** CORRECCIÓN AQUÍ: Verifica filePath antes de usar split *** */}
                     <span>{filePath ? filePath.split(/[\\/]/).pop() : "Untitled"} - DreamC main</span>
                 </HStack>
             </Stack>
@@ -218,4 +233,3 @@ function CodeEditor({ action, theme, tokens, onContentChange }) {
 }
 
 export default CodeEditor;
-

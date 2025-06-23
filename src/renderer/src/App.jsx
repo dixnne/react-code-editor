@@ -11,6 +11,7 @@ function App() {
   const [editorContent, setEditorContent] = useState("");
   // eslint-disable-next-line no-unused-vars
   const [tokens, setTokens] = useState([]);
+  const [syntax, setSyntax] = useState([]);
 
   function handleThemeChange(t) {
     setTheme(t);
@@ -26,10 +27,10 @@ function App() {
     const fetchTokens = async () => {
       try {
         const result = await window.electron.runLexer(editorContent);
-        const result2 = await window.electron.runParser(editorContent);
+        const parserResult = await window.electron.runParser(editorContent);
         setTokens(result);
-        console.log("Parser Result:", result2);
-        console.log("Tokens:", result);
+        setSyntax(parserResult);
+        console.log(parserResult);
       } catch (error) {
         console.error("Error fetching tokens:", error);
       }
@@ -50,7 +51,7 @@ function App() {
         py={8}
         height="100%"
       >
-        <CodeEditor theme={theme} action={action} tokens={tokens} onContentChange={handleContentChange}></CodeEditor>
+        <CodeEditor theme={theme} action={action} tokens={tokens} syntax={syntax} onContentChange={handleContentChange}></CodeEditor>
       </Box>
     </Box>
   )

@@ -15,13 +15,6 @@ use crate::token::{LexerToken, TokenType};
 use tonic::transport::Server;
 use crate::grpc_parser::parser::parser_server::ParserServer;
 use reflection::FILE_DESCRIPTOR_SET;
-pub mod lexer_proto {
-    tonic::include_proto!("lexer"); // Incluye el código Rust generado desde lexer.proto.
-    
-    // Constante que contiene el descriptor del archivo .proto, usado para reflexión del servicio gRPC.
-    pub (crate) const FILE_DESCRIPTOR_SET: &[u8] =
-        tonic::include_file_descriptor_set!("lexer_descriptor");
-}
 
 fn create_tokens(source: &str) -> Vec<LexerToken> {
     let mut lexer = LexicalAnalyzer::new(source);
@@ -49,8 +42,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let parser_service = ParserService::default(); // Crea una instancia del servicio de análisis sintáctico.
 
     let someCode = r#"
-        fn main() {
-            let x = 10; // Variable de tipo entero
+        fn main() -> int{
+            let x = 10;
             let y = 20.5; // Variable de tipo flotante
             let z = "Hola, mundo"; // Variable de tipo cadena
 
