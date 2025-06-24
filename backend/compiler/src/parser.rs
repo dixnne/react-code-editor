@@ -274,7 +274,12 @@ impl<'a> Parser<'a> {
     }
 
     fn if_statement(&mut self) -> Result<IfStatement, SyntaxError> {
-        let condition = self.expression()?;
+        // Change this line:
+        // let condition = self.expression()?;
+        
+        // To this:
+        let condition = self.logical_or()?;
+        
         let then_block = self.block_statement()?;
         let mut else_block = None;
 
@@ -291,7 +296,7 @@ impl<'a> Parser<'a> {
     }
 
     fn while_statement(&mut self) -> Result<WhileStatement, SyntaxError> {
-        let condition = self.expression()?;
+        let condition = self.logical_or()?; // Changed from expression()
         let body = self.block_statement()?;
         Ok(WhileStatement { condition, body })
     }
