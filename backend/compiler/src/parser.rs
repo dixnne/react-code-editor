@@ -241,6 +241,20 @@ impl<'a> Parser<'a> {
         Ok(ReturnStatement { value })
     }
 
+    fn logical_and(&mut self) -> Result<Expression, SyntaxError> {
+        let mut expr = self.equality()?;
+        while self.match_token(TokenType::DoubleAmpersand) {
+            let op = BinaryOp::DoubleAmpersand;
+            let right = self.equality()?;
+            expr = Expression::Binary { 
+                left: Box::new(expr), 
+                op, 
+                right: Box::new(right) 
+            };
+        }
+        Ok(expr)
+    }
+
     fn if_statement(&mut self) -> Result<IfStatement, SyntaxError> {
         let condition = self.expression()?;
         let then_block = self.block_statement()?;

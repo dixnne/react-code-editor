@@ -182,6 +182,31 @@ fn struct_inst_to_proto(name: &Identifier, fields: &[(Identifier, Expression)]) 
     }
 }
 
+fn logical_or(&mut self) -> Result<Expression, SyntaxError> {
+    let mut expr = self.logical_and()?;  // Changed from equality() to logical_and()
+    while self.match_token(TokenType::DoubleBar) {
+        let op = BinaryOp::DoubleBar;
+        let right = self.logical_and()?;  // Changed from equality() to logical_and()
+        expr = Expression::Binary { left: Box::new(expr), op, right: Box::new(right) };
+    }
+    Ok(expr)
+}
+
+// New method to handle && operator
+fn logical_and(&mut self) -> Result<Expression, SyntaxError> {
+    let mut expr = self.equality()?;
+    while self.match_token(TokenType::DoubleAmpersand) {
+        let op = BinaryOp::DoubleAmpersand;
+        let right = self.equality()?;
+        expr = Expression::Binary { 
+            left: Box::new(expr), 
+            op, 
+            right: Box::new(right) 
+        };
+    }
+    Ok(expr)
+}
+
 fn binary_expr_to_proto(left: &Expression, op: &BinaryOp, right: &Expression) -> ASTNode {
     let op_str = match op {
         BinaryOp::Plus => "+", BinaryOp::Minus => "-", BinaryOp::Asterisk => "*",
