@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* src/assets/dreamc.css */
+/* ... las directivas de @tailwind ... */
+
+/* TreeView Styling */
+.tree-view-container {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 14px;
+  padding: 1rem;
+  color: #d4d4d4;
+}
+.tree-node {
+  margin-left: 1rem;
+  padding-left: 1rem;
+  border-left: 1px dashed #4a5568;
+}
+.node-card {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.node-card:hover {
+  background-color: #374151; /* gray-700 */
+}
+.expand-icon {
+  margin-right: 8px;
+  color: #9ca3af; /* gray-400 */
+}
+.node-type {
+  font-weight: 600;
+  color: #93c5fd; /* blue-300 */
+}
+.node-value {
+  color: #a7f3d0; /* emerald-200 */
+  margin-left: 8px;
+}
+.node-location {
+  color: #9ca3af; /* gray-400 */
+  font-size: 12px;
+  margin-left: auto;
+  padding-left: 1rem;
+}
