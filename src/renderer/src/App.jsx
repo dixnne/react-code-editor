@@ -95,10 +95,9 @@ const TreeNode = ({ node, theme }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const hasChildren = node.children && node.children.length > 0;
 
-    const isLightTheme = theme.code === 'light';
     const nodeTypeColor = theme.tertiary;
-    const nodeValueColor = theme.text;
-    const locationColor = theme.secondary;
+    const nodeValueColor = theme.syntax.keyword;
+    const locationColor = theme.text;
     const hoverBgColor = theme.secondarySemi;
     const borderColor = theme.text;
 
@@ -117,7 +116,7 @@ const TreeNode = ({ node, theme }) => {
                 <div className="flex items-baseline gap-x-2">
                     <span className="font-semibold" style={{ color: nodeTypeColor }}>{node.node_type}</span>
                     {node.value && <span style={{ color: nodeValueColor }}>: {node.value}</span>}
-                    {(node.start_line !== undefined) && <span className="text-xs" style={{ color: locationColor }}>(L{node.start_line}:{node.start_column})</span>}
+                    {(node.start_line !== undefined) && <span className="text-xs font-bold" style={{ color: locationColor }}>(L{node.start_line}:{node.start_column})</span>}
                 </div>
             </div>
             {isExpanded && hasChildren && (
@@ -244,7 +243,7 @@ const Tabs = ({ items, activeTab, setActiveTab, theme }) => (
     <div className="flex items-center border-b px-2" style={{ borderColor: theme.primary, backgroundColor: theme.secondary }}>
         {items.map((item, index) => (
             <button key={item} onClick={() => setActiveTab(index)}
-                className={clsx("px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors duration-200", { "border-blue-400 text-white": activeTab === index, "border-transparent text-gray-400 hover:text-white": activeTab !== index })}>
+                className={clsx("px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors duration-200", { "border-white-400 text-white": activeTab === index, "border-transparent text-white hover:text-white": activeTab !== index })}>
                 {item}
             </button>
         ))}
@@ -409,7 +408,7 @@ function App() {
                             <PanelResizeHandle className="w-2 bg-gray-700 hover:bg-blue-600 transition-colors" />
                             <Panel defaultSize={40} minSize={20}>
                                 <div className="flex flex-col h-full rounded-tr-md" style={{ backgroundColor: currentTheme.primary }}>
-                                    <Tabs items={["Lexical", "Syntactic", "Semantic", "Intermediate Code", "Hash Table"]} activeTab={analysisTab} setActiveTab={setAnalysisTab} theme={currentTheme} />
+                                    <Tabs items={["Lexical", "Syntactic", "Semantic", "Intermediate", "Hash"]} activeTab={analysisTab} setActiveTab={setAnalysisTab} theme={currentTheme} />
                                     <div className="flex-grow overflow-auto" style={{ backgroundColor: currentTheme.secondarySemi }}>{renderAnalysisPanel()}</div>
                                 </div>
                             </Panel>
