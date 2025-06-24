@@ -16,7 +16,7 @@ export class DreamCHighlightRules extends TextHighlightRules {
         super();
 
         const keywords = (
-            "let|const|fn|if|else|while|struct|return|for|in"
+            "let|const|fn|if|else|while|struct|return|for|in|do|until"
         );
         const keywordMapper = this.createKeywordMapper({
             "keyword.control": keywords, // Color 4

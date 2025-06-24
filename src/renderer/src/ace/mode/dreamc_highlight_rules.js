@@ -11,7 +11,7 @@ ace.define("ace/mode/dreamc_highlight_rules", ["require", "exports", "module", "
     
         // Regular expressions for different token types
         var keywords = (
-            "if|else|end|do|while|switch|case|int|float|main|cin|cout"
+            "if|else|end|do|while|switch|case|int|float|main|cin|cout|do|while"
         );
     
         var builtinConstants = (
