@@ -175,7 +175,7 @@ impl<'a> Parser<'a> {
             "float" => Ok(Type::Float),
             "string" => Ok(Type::String),
             "bool" => Ok(Type::Bool),
-            "void" => Ok(Type::Void), // <-- AÑADIR ESTA LÍNEA
+            "void" => Ok(Type::Void),
             _ => Err(SyntaxError::UnexpectedToken(
                 format!("Tipo desconocido '{}'", type_token.lexeme),
                 type_token.line,
@@ -274,10 +274,7 @@ impl<'a> Parser<'a> {
     }
 
     fn if_statement(&mut self) -> Result<IfStatement, SyntaxError> {
-        // Change this line:
-        // let condition = self.expression()?;
-        
-        // To this:
+        // Correcto: `logical_or` maneja la precedencia de operadores lógicos y relacionales.
         let condition = self.logical_or()?;
         
         let then_block = self.block_statement()?;
@@ -296,7 +293,8 @@ impl<'a> Parser<'a> {
     }
 
     fn while_statement(&mut self) -> Result<WhileStatement, SyntaxError> {
-        let condition = self.logical_or()?; // Changed from expression()
+        // Correcto: `logical_or` maneja la precedencia de operadores lógicos y relacionales.
+        let condition = self.logical_or()?;
         let body = self.block_statement()?;
         Ok(WhileStatement { condition, body })
     }
@@ -456,13 +454,9 @@ impl<'a> Parser<'a> {
                     },
                 };
             } else if self.match_token(TokenType::Increment) || self.match_token(TokenType::Decrement) {
-                // --- INICIO DE LA SECCIÓN CORREGIDA ---
                 // "Desugarizamos" x++ a x = x + 1
-                
                 let op_type = self.previous().unwrap().token_type;
-
-                // Verificamos que la expresión sea un objetivo válido (un identificador).
-                // `expr` se consume aquí.
+                
                 if let Expression::Identifier(target_id) = expr {
                     let binary_op = if op_type == TokenType::Increment {
                         BinaryOp::Plus
@@ -471,24 +465,20 @@ impl<'a> Parser<'a> {
                     };
 
                     // Creamos la parte derecha de la asignación: `x + 1`
-                    // Para esto, necesitamos una copia del identificador.
                     let right_hand_side = Expression::Binary {
-                        left: Box::new(Expression::Identifier(target_id.clone())), // Usamos el clon
+                        left: Box::new(Expression::Identifier(target_id.clone())),
                         op: binary_op,
                         right: Box::new(Expression::Literal(Literal::Int(1))),
                     };
 
                     // Reasignamos `expr` a la nueva expresión de Asignación.
-                    // El `target_id` original se mueve aquí.
                     expr = Expression::Assignment {
                         target: target_id,
                         value: Box::new(right_hand_side),
                     };
                 } else {
-                    // Si no es un identificador (ej. `5++`), es un error.
                     return Err(SyntaxError::InvalidAssignmentTarget);
                 }
-                // --- FIN DE LA SECCIÓN CORREGIDA ---
             } else {
                 break;
             }
@@ -510,6 +500,18 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Result<Expression, SyntaxError> {
+        // --- CAMBIO PRINCIPAL (CORREGIDO) ---
+        // Se comprueba directamente el lexema para `true` y `false`,
+        // sin depender del tipo de token. Esto es más robusto.
+        if self.peek().map_or(false, |t| t.lexeme == "true") {
+            self.advance(); // Consumir el token 'true'
+            return Ok(Expression::Literal(Literal::Bool(true)));
+        }
+        if self.peek().map_or(false, |t| t.lexeme == "false") {
+            self.advance(); // Consumir el token 'false'
+            return Ok(Expression::Literal(Literal::Bool(false)));
+        }
+
         if self.match_token(TokenType::Integer) {
             let token = self.previous().unwrap();
             return Ok(Expression::Literal(Literal::Int(token.lexeme.parse().unwrap())));
@@ -562,7 +564,9 @@ impl<'a> Parser<'a> {
             return Ok(Expression::Grouped(Box::new(expr)));
         }
         let token = self.peek().unwrap();
-        Err(SyntaxError::UnexpectedToken(format!("Token inesperado: '{}'", token.lexeme), token.line, token.column))
+        let err = SyntaxError::UnexpectedToken(format!("Token inesperado: '{}'", token.lexeme), token.line, token.column);
+        self.errors.push(err.clone());
+        Err(err)
     }
 
     fn struct_instantiation(&mut self) -> Result<Expression, SyntaxError> {
