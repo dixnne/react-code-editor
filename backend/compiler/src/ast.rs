@@ -83,7 +83,6 @@ pub enum Expression {
         function: Box<Expression>,
         arguments: Vec<Expression>,
     },
-    // --- NUEVAS VARIANTES DE EXPRESIÓN ---
     Array(Vec<Expression>),
     Object(Vec<(Identifier, Expression)>),
     Splat(Box<Expression>),
@@ -136,13 +135,14 @@ pub enum UnaryOp {
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
-    // Se elimina VariableDeclaration de aquí para evitar redundancia con Declaration
     Expression(Expression),
     Return(ReturnStatement),
     If(IfStatement),
     Block(Block),
     While(WhileStatement), 
     For(ForStatement),
+    // --- NUEVA VARIANTE DE SENTENCIA ---
+    DoUntil(DoUntilStatement),
 }
 
 #[derive(Debug, PartialEq)]
@@ -174,6 +174,13 @@ pub struct WhileStatement {
     pub body: Block,
 }
 
+// --- NUEVA ESTRUCTURA PARA DO-UNTIL ---
+#[derive(Debug, PartialEq)]
+pub struct DoUntilStatement {
+    pub body: Block,
+    pub condition: Expression,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct ForStatement {
     pub variable: Identifier,
@@ -188,9 +195,8 @@ pub enum Declaration {
     Function(Function),
     Variable(VariableDeclaration),
     Struct(StructDeclaration),
-    // --- NUEVAS VARIANTES DE DECLARACIÓN ---
     Constant(ConstantDeclaration),
-    Statement(Statement), // Para permitir sentencias en el nivel superior
+    Statement(Statement), 
 }
 
 #[derive(Debug, PartialEq)]

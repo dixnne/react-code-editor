@@ -26,6 +26,9 @@ impl<'a> LexicalAnalyzer<'a> {
         keywords.insert("in".to_string(), TokenType::Keyword);
         keywords.insert("true".to_string(), TokenType::Boolean);
         keywords.insert("false".to_string(), TokenType::Boolean);
+        // --- NUEVAS PALABRAS CLAVE ---
+        keywords.insert("do".to_string(), TokenType::Keyword);
+        keywords.insert("until".to_string(), TokenType::Keyword);
 
         Self {
             input: source.chars().peekable(),

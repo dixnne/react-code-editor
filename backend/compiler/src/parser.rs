@@ -1,10 +1,6 @@
 use crate::ast::*;
 use crate::token::{LexerToken, TokenType};
 
-// NOTA: Recuerda haber actualizado tu archivo `ast.rs` con las nuevas
-// estructuras (ConstantDeclaration, Expression::Array, etc.) como se
-// mencionó en la respuesta anterior para que este código compile.
-
 pub struct Parser<'a> {
     tokens: &'a [LexerToken],
     current: usize,
@@ -84,7 +80,7 @@ impl<'a> Parser<'a> {
 
             if let Some(next) = self.peek() {
                 match next.lexeme.as_str() {
-                    "fn" | "let" | "const" | "return" | "if" | "while" | "for" | "struct" => return,
+                    "fn" | "let" | "const" | "return" | "if" | "while" | "for" | "struct" | "do" | "until" => return,
                     _ => {}
                 }
             }
@@ -111,7 +107,6 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<Declaration, SyntaxError> {
-        // Usamos peek para no consumir el token y que `statement` pueda revisarlo también
         if let Some(token) = self.peek() {
             if token.token_type == TokenType::Keyword {
                  match token.lexeme.as_str() {
@@ -119,11 +114,10 @@ impl<'a> Parser<'a> {
                     "let" => { self.advance(); return self.variable_declaration().map(Declaration::Variable); },
                     "const" => { self.advance(); return self.constant_declaration().map(Declaration::Constant); },
                     "struct" => { self.advance(); return self.struct_declaration().map(Declaration::Struct); },
-                     _ => {} // Si es if, while, etc., lo manejará `statement`
+                     _ => {} 
                 }
             }
         }
-        // Si no es una declaración de alto nivel, es una sentencia
         self.statement().map(Declaration::Statement)
     }
     
@@ -229,6 +223,10 @@ impl<'a> Parser<'a> {
     // --- Sentencias ---
     
     fn statement(&mut self) -> Result<Statement, SyntaxError> {
+        if self.peek().map_or(false, |t| t.lexeme == "do") {
+            self.advance();
+            return self.do_until_statement().map(Statement::DoUntil);
+        }
         if self.peek().map_or(false, |t| t.lexeme == "if") {
             self.advance();
             return self.if_statement().map(Statement::If);
@@ -258,7 +256,7 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::LeftBrace, "Se esperaba '{' para iniciar un bloque.")?;
         let mut statements = Vec::new();
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
-            match self.declaration() { // Un bloque puede contener declaraciones
+            match self.declaration() {
                 Ok(decl) => statements.push(decl),
                 Err(_) => self.synchronize(),
             }
@@ -274,16 +272,14 @@ impl<'a> Parser<'a> {
     }
 
     fn if_statement(&mut self) -> Result<IfStatement, SyntaxError> {
-        // Correcto: `logical_or` maneja la precedencia de operadores lógicos y relacionales.
         let condition = self.logical_or()?;
-        
         let then_block = self.block_statement()?;
         let mut else_block = None;
 
         if self.peek().map_or(false, |t| t.lexeme == "else") {
-            self.advance(); // Consume 'else'
+            self.advance();
             if self.peek().map_or(false, |t| t.lexeme == "if") {
-                self.advance(); // Consume 'if'
+                self.advance();
                 else_block = Some(ElseBranch::If(Box::new(self.if_statement()?)));
             } else {
                 else_block = Some(ElseBranch::Block(Box::new(Statement::Block(self.block_statement()?))));
@@ -293,10 +289,38 @@ impl<'a> Parser<'a> {
     }
 
     fn while_statement(&mut self) -> Result<WhileStatement, SyntaxError> {
-        // Correcto: `logical_or` maneja la precedencia de operadores lógicos y relacionales.
         let condition = self.logical_or()?;
         let body = self.block_statement()?;
         Ok(WhileStatement { condition, body })
+    }
+    
+    fn do_until_statement(&mut self) -> Result<DoUntilStatement, SyntaxError> {
+        let body = self.block_statement()?;
+    
+        // --- CORRECCIÓN DEL ERROR ---
+        // Se maneja explícitamente el caso en que no haya más tokens
+        // y se evita crear una referencia a un valor temporal.
+        if let Some(token) = self.peek() {
+            if token.token_type == TokenType::Keyword && token.lexeme == "until" {
+                self.advance(); // Consumir 'until'
+            } else {
+                let err = SyntaxError::UnexpectedToken(format!("Se esperaba la palabra clave 'until' después del bloque 'do', pero se encontró '{}'", token.lexeme), token.line, token.column);
+                self.errors.push(err.clone());
+                return Err(err);
+            }
+        } else {
+            // No hay más tokens, es un final de archivo inesperado.
+            let err = SyntaxError::UnexpectedEndOfFile;
+            self.errors.push(err.clone());
+            return Err(err);
+        }
+        
+        self.consume(TokenType::LeftParen, "Se esperaba '(' después de 'until'.")?;
+        let condition = self.logical_or()?;
+        self.consume(TokenType::RightParen, "Se esperaba ')' después de la condición.")?;
+        self.consume(TokenType::Semicolon, "Se esperaba ';' después de la sentencia do-until.")?;
+    
+        Ok(DoUntilStatement { body, condition })
     }
 
     fn for_statement(&mut self) -> Result<ForStatement, SyntaxError> {
@@ -454,7 +478,6 @@ impl<'a> Parser<'a> {
                     },
                 };
             } else if self.match_token(TokenType::Increment) || self.match_token(TokenType::Decrement) {
-                // "Desugarizamos" x++ a x = x + 1
                 let op_type = self.previous().unwrap().token_type;
                 
                 if let Expression::Identifier(target_id) = expr {
@@ -463,15 +486,12 @@ impl<'a> Parser<'a> {
                     } else {
                         BinaryOp::Minus
                     };
-
-                    // Creamos la parte derecha de la asignación: `x + 1`
                     let right_hand_side = Expression::Binary {
                         left: Box::new(Expression::Identifier(target_id.clone())),
                         op: binary_op,
                         right: Box::new(Expression::Literal(Literal::Int(1))),
                     };
 
-                    // Reasignamos `expr` a la nueva expresión de Asignación.
                     expr = Expression::Assignment {
                         target: target_id,
                         value: Box::new(right_hand_side),
@@ -500,15 +520,12 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Result<Expression, SyntaxError> {
-        // --- CAMBIO PRINCIPAL (CORREGIDO) ---
-        // Se comprueba directamente el lexema para `true` y `false`,
-        // sin depender del tipo de token. Esto es más robusto.
         if self.peek().map_or(false, |t| t.lexeme == "true") {
-            self.advance(); // Consumir el token 'true'
+            self.advance();
             return Ok(Expression::Literal(Literal::Bool(true)));
         }
         if self.peek().map_or(false, |t| t.lexeme == "false") {
-            self.advance(); // Consumir el token 'false'
+            self.advance();
             return Ok(Expression::Literal(Literal::Bool(false)));
         }
 

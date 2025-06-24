@@ -84,7 +84,7 @@ impl Parser for ParserService {
     }
 }
 
-// --- Funciones de Conversión de AST a Protobuf (Implementación Completa) ---
+// --- Funciones de Conversión de AST a Protobuf ---
 
 fn program_to_proto(program: &Program) -> AstNode {
     AstNode {
@@ -112,10 +112,11 @@ fn statement_to_proto(stmt: &Statement) -> AstNode {
         Statement::Block(b) => block_to_proto(b),
         Statement::While(w) => while_stmt_to_proto(w),
         Statement::For(f) => for_stmt_to_proto(f),
+        // --- MODIFICADO: Añadido el caso para DoUntil ---
+        Statement::DoUntil(d) => do_until_stmt_to_proto(d),
     }
 }
 
-// CORREGIDO: Se añade el caso para MemberAccess
 fn expression_to_proto(expr: &Expression) -> AstNode {
      match expr {
         Expression::Identifier(id) => identifier_to_proto(id),
@@ -133,7 +134,6 @@ fn expression_to_proto(expr: &Expression) -> AstNode {
     }
 }
 
-// --- NUEVA FUNCIÓN ---
 fn member_access_to_proto(object: &Expression, property: &Identifier) -> AstNode {
     AstNode {
         node_type: "MemberAccess".to_string(),
@@ -264,6 +264,19 @@ fn while_stmt_to_proto(while_stmt: &WhileStatement) -> AstNode {
     }
 }
 
+// --- NUEVA FUNCIÓN: Conversión para DoUntil ---
+fn do_until_stmt_to_proto(do_until_stmt: &DoUntilStatement) -> AstNode {
+    AstNode {
+        node_type: "DoUntil".to_string(),
+        children: vec![
+            block_to_proto(&do_until_stmt.body),
+            expression_to_proto(&do_until_stmt.condition),
+        ],
+        ..Default::default()
+    }
+}
+
+
 fn for_stmt_to_proto(for_stmt: &ForStatement) -> AstNode {
     AstNode {
         node_type: "For".to_string(),
@@ -296,7 +309,6 @@ fn literal_to_proto(lit: &Literal) -> AstNode {
     AstNode { node_type: node_type.to_string(), value, ..Default::default() }
 }
 
-// CORREGIDO: Se añade el caso para `Void`
 fn type_to_proto(ty: &Type) -> AstNode {
     let type_str = match ty {
         Type::Int => "int", Type::Float => "float", Type::String => "string", Type::Bool => "bool",
