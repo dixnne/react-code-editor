@@ -85,7 +85,9 @@ pub enum Expression {
     },
     // --- NUEVAS VARIANTES DE EXPRESIÓN ---
     Array(Vec<Expression>),
-    Object(Vec<(Identifier, Expression)>),
+    MapLiteral {
+        properties: Vec<(Identifier, Expression)>,
+    },
     Splat(Box<Expression>),
     StructInstantiation {
         name: Identifier,

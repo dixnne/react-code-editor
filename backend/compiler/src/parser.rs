@@ -263,20 +263,25 @@ impl<'a> Parser<'a> {
         Ok(WhileStatement { condition, body })
     }
 
+    // --- FUNCIÓN CORREGIDA ---
     fn for_statement(&mut self) -> Result<ForStatement, SyntaxError> {
         let variable_token = self.consume(TokenType::Identifier, "Se esperaba una variable de bucle después de 'for'.")?.clone();
         let variable = Identifier { name: variable_token.lexeme, line: variable_token.line, column: variable_token.column };
+    
+        // Verificar y consumir 'in' de forma robusta
         if let Some(token) = self.peek() {
             if token.token_type == TokenType::Keyword && token.lexeme == "in" {
-                self.advance();
+                self.advance(); // Solo consumir si es 'in'
             } else {
                 return Err(SyntaxError::MissingInKeyword);
             }
         } else {
             return Err(SyntaxError::UnexpectedEndOfFile);
         }
+        
         let iterable = self.expression()?;
         let body = self.block_statement()?;
+    
         Ok(ForStatement { variable, iterable, body })
     }
 
@@ -429,13 +434,11 @@ impl<'a> Parser<'a> {
                 if matches!(&expr, Expression::Identifier(_) | Expression::MemberAccess { .. }) {
                     let op_type = self.previous().unwrap().token_type;
                     let binary_op = if op_type == TokenType::Increment { BinaryOp::Plus } else { BinaryOp::Minus };
-                    
                     let right_hand_side = Expression::Binary {
                         left: Box::new(expr.clone()),
                         op: binary_op,
                         right: Box::new(Expression::Literal(Literal::Int(1))),
                     };
-                    
                     expr = Expression::Assignment {
                         target: Box::new(expr),
                         value: Box::new(right_hand_side),
@@ -497,6 +500,10 @@ impl<'a> Parser<'a> {
             self.consume(TokenType::RightBracket, "Se esperaba ']' al final del array.")?;
             return Ok(Expression::Array(elements));
         }
+
+        if self.match_token(TokenType::LeftBrace) {
+            return self.map_literal_expression();
+        }
         
         if self.match_token(TokenType::Identifier) {
             let token = self.previous().unwrap();
@@ -527,6 +534,28 @@ impl<'a> Parser<'a> {
         }
         self.consume(TokenType::RightParen, "Se esperaba ')' después de los argumentos.")?;
         Ok(Expression::FunctionCall { function: Box::new(callee), arguments })
+    }
+
+    fn map_literal_expression(&mut self) -> Result<Expression, SyntaxError> {
+        let mut properties = Vec::new();
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            let key_token = self.consume(TokenType::Identifier, "Se esperaba una clave (identificador) en el objeto literal.")?.clone();
+            let key = Identifier { 
+                name: key_token.lexeme, 
+                line: key_token.line, 
+                column: key_token.column 
+            };
+            self.consume(TokenType::Colon, "Se esperaba ':' después de la clave en el objeto literal.")?;
+            let value = self.expression()?;
+            properties.push((key, value));
+            if !self.check(TokenType::RightBrace) {
+                self.consume(TokenType::Comma, "Se esperaba ',' después del valor en el objeto literal.")?;
+            }
+        }
+
+        self.consume(TokenType::RightBrace, "Se esperaba '}' para cerrar el objeto literal.")?;
+        Ok(Expression::MapLiteral { properties })
     }
 }
 

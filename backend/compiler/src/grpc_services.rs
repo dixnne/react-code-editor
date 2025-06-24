@@ -126,7 +126,7 @@ fn expression_to_proto(expr: &Expression) -> AstNode {
         Expression::Grouped(expr) => grouped_expr_to_proto(expr),
         Expression::FunctionCall { function, arguments } => func_call_to_proto(function, arguments),
         Expression::Array(elements) => array_to_proto(elements),
-        Expression::Object(fields) => object_to_proto(fields),
+        Expression::MapLiteral { properties } => map_literal_to_proto(properties),
         Expression::Splat(expr) => splat_to_proto(expr),
         Expression::StructInstantiation { name, fields } => struct_inst_to_proto(name, fields),
         Expression::MemberAccess { object, property } => member_access_to_proto(object, property),
@@ -315,7 +315,7 @@ fn array_to_proto(elements: &[Expression]) -> AstNode {
     }
 }
 
-fn object_to_proto(fields: &[(Identifier, Expression)]) -> AstNode {
+fn map_literal_to_proto(fields: &[(Identifier, Expression)]) -> AstNode {
     AstNode {
         node_type: "ObjectLiteral".to_string(),
         children: fields.iter().map(|(key, val)| AstNode {
