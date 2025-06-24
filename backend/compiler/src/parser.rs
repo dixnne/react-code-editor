@@ -296,30 +296,30 @@ impl<'a> Parser<'a> {
     
     fn do_until_statement(&mut self) -> Result<DoUntilStatement, SyntaxError> {
         let body = self.block_statement()?;
-    
-        // --- CORRECCIÓN DEL ERROR ---
-        // Se maneja explícitamente el caso en que no haya más tokens
-        // y se evita crear una referencia a un valor temporal.
+
+        // Consume 'until' keyword
         if let Some(token) = self.peek() {
             if token.token_type == TokenType::Keyword && token.lexeme == "until" {
-                self.advance(); // Consumir 'until'
+                self.advance(); // Consume 'until'
             } else {
-                let err = SyntaxError::UnexpectedToken(format!("Se esperaba la palabra clave 'until' después del bloque 'do', pero se encontró '{}'", token.lexeme), token.line, token.column);
+                let err = SyntaxError::UnexpectedToken(
+                    format!("Se esperaba la palabra clave 'until' después del bloque 'do', pero se encontró '{}'", token.lexeme),
+                    token.line,
+                    token.column,
+                );
                 self.errors.push(err.clone());
                 return Err(err);
             }
         } else {
-            // No hay más tokens, es un final de archivo inesperado.
             let err = SyntaxError::UnexpectedEndOfFile;
             self.errors.push(err.clone());
             return Err(err);
         }
         
-        self.consume(TokenType::LeftParen, "Se esperaba '(' después de 'until'.")?;
+        // Parse condition directly without parentheses
         let condition = self.logical_or()?;
-        self.consume(TokenType::RightParen, "Se esperaba ')' después de la condición.")?;
         self.consume(TokenType::Semicolon, "Se esperaba ';' después de la sentencia do-until.")?;
-    
+
         Ok(DoUntilStatement { body, condition })
     }
 

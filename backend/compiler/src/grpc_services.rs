@@ -112,7 +112,6 @@ fn statement_to_proto(stmt: &Statement) -> AstNode {
         Statement::Block(b) => block_to_proto(b),
         Statement::While(w) => while_stmt_to_proto(w),
         Statement::For(f) => for_stmt_to_proto(f),
-        // --- MODIFICADO: Añadido el caso para DoUntil ---
         Statement::DoUntil(d) => do_until_stmt_to_proto(d),
     }
 }
@@ -264,7 +263,6 @@ fn while_stmt_to_proto(while_stmt: &WhileStatement) -> AstNode {
     }
 }
 
-// --- NUEVA FUNCIÓN: Conversión para DoUntil ---
 fn do_until_stmt_to_proto(do_until_stmt: &DoUntilStatement) -> AstNode {
     AstNode {
         node_type: "DoUntil".to_string(),
@@ -275,7 +273,6 @@ fn do_until_stmt_to_proto(do_until_stmt: &DoUntilStatement) -> AstNode {
         ..Default::default()
     }
 }
-
 
 fn for_stmt_to_proto(for_stmt: &ForStatement) -> AstNode {
     AstNode {

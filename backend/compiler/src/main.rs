@@ -39,13 +39,14 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let someCode = r#"
         fn main() -> int{
-            let x = 10;
-            let y = 20.5; // Variable de tipo flotante
-            let z = "Hola, mundo"; // Variable de tipo cadena
-
-            if x < y { // Comparación entre entero y flotante convertido a entero
-                println("{}", z); // Imprime la cadena
-            }
+        do {
+                y = (y + 1) * 2 + 1;
+                
+                while x > 7 {
+                    x = 6 + 8 / 9 * 8 / 3;
+                    mas = 36 / 7;
+                }
+            } until y == 5;
         }
         "#;
 
