@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package compiler;
+
+message SemanticError {
+    string message = 1;
+    uint32 line = 2;
+    uint32 column = 3;
+}
+
+message Symbol {
+    string name = 1;
+    string symbol_type = 2;
+    string data_type = 3;
+    uint32 line = 4;
+    uint32 column = 5;
+}
+
+message Scope {
+    repeated Symbol symbols = 1;
+    repeated Scope children = 2;
+}
+
+message SymbolTable {
+    Scope root_scope = 1;
+}
+
+message SemanticAnalysisResponse {
+    repeated SemanticError errors = 1;
+    SymbolTable symbol_table = 2;
+}
