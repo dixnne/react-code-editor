@@ -23,6 +23,23 @@ pub enum Symbol {
         line: usize,
         column: usize,
     },
+    Constant {  // Add this variant
+        name: String,
+        type_: Type,
+        line: usize,
+        column: usize,
+    },
+}
+
+impl Symbol {
+    pub fn get_type(&self) -> Type {
+        match self {
+            Symbol::Variable { type_, .. } => type_.clone(),
+            Symbol::Function { return_type, .. } => return_type.clone(),
+            Symbol::Struct { .. } => Type::Void, // Structs don't have a single type
+            Symbol::Constant { type_, .. } => type_.clone(), // Handle Constant type
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

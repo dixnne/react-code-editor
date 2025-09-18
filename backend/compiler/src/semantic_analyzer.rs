@@ -49,7 +49,12 @@ impl SemanticAnalyzer {
         let value_type = self.analyze_expression(&var_decl.value);
 
         if declared_type != Type::Void && declared_type != value_type {
-            self.errors.push(SemanticError::TypeMismatch(declared_type.to_string(), value_type.to_string(), var_decl.identifier.line, var_decl.identifier.column));
+            self.errors.push(SemanticError::TypeMismatch(
+                declared_type.to_string(),
+                value_type.to_string(),
+                var_decl.identifier.line,
+                var_decl.identifier.column,
+            ));
         }
 
         let symbol = Symbol::Variable {
@@ -60,7 +65,11 @@ impl SemanticAnalyzer {
             column: var_decl.identifier.column,
         };
         if !self.symbol_table.insert(name.clone(), symbol) {
-            self.errors.push(SemanticError::RedeclaredVariable(name.clone(), var_decl.identifier.line, var_decl.identifier.column));
+            self.errors.push(SemanticError::RedeclaredVariable(
+                name.clone(),
+                var_decl.identifier.line,
+                var_decl.identifier.column,
+            ));
         }
     }
 
@@ -70,24 +79,38 @@ impl SemanticAnalyzer {
         let value_type = self.analyze_expression(&const_decl.value);
 
         if declared_type != Type::Void && declared_type != value_type {
-            self.errors.push(SemanticError::TypeMismatch(declared_type.to_string(), value_type.to_string(), const_decl.identifier.line, const_decl.identifier.column));
+            self.errors.push(SemanticError::TypeMismatch(
+                declared_type.to_string(),
+                value_type.to_string(),
+                const_decl.identifier.line,
+                const_decl.identifier.column,
+            ));
         }
 
-        let symbol = Symbol::Variable {
+        let symbol = Symbol::Constant {
+            // Changed to Constant variant
             name: name.clone(),
             type_: value_type,
-            defined: true,
             line: const_decl.identifier.line,
             column: const_decl.identifier.column,
         };
+
         if !self.symbol_table.insert(name.clone(), symbol) {
-            self.errors.push(SemanticError::RedeclaredVariable(name.clone(), const_decl.identifier.line, const_decl.identifier.column));
+            self.errors.push(SemanticError::RedeclaredVariable(
+                name.clone(),
+                const_decl.identifier.line,
+                const_decl.identifier.column,
+            ));
         }
     }
 
     fn analyze_function_declaration(&mut self, func_decl: &Function) {
         let name = &func_decl.name.name;
-        let parameters: Vec<Type> = func_decl.parameters.iter().map(|p| p.param_type.clone()).collect();
+        let parameters: Vec<Type> = func_decl
+            .parameters
+            .iter()
+            .map(|p| p.param_type.clone())
+            .collect();
         let symbol = Symbol::Function {
             name: name.clone(),
             parameters,
@@ -97,7 +120,11 @@ impl SemanticAnalyzer {
         };
 
         if !self.symbol_table.insert(name.clone(), symbol) {
-            self.errors.push(SemanticError::RedeclaredVariable(name.clone(), func_decl.name.line, func_decl.name.column));
+            self.errors.push(SemanticError::RedeclaredVariable(
+                name.clone(),
+                func_decl.name.line,
+                func_decl.name.column,
+            ));
         }
 
         self.symbol_table.enter_scope();
@@ -111,7 +138,11 @@ impl SemanticAnalyzer {
                 column: param.name.column,
             };
             if !self.symbol_table.insert(param_name.clone(), param_symbol) {
-                self.errors.push(SemanticError::RedeclaredVariable(param_name.clone(), param.name.line, param.name.column));
+                self.errors.push(SemanticError::RedeclaredVariable(
+                    param_name.clone(),
+                    param.name.line,
+                    param.name.column,
+                ));
             }
         }
         self.analyze_block(&func_decl.body);
@@ -123,7 +154,12 @@ impl SemanticAnalyzer {
         let mut fields = std::collections::HashMap::new();
         for field in &struct_decl.fields {
             if fields.contains_key(&field.name.name) {
-                self.errors.push(SemanticError::RedeclaredField(name.clone(), field.name.name.clone(), field.name.line, field.name.column));
+                self.errors.push(SemanticError::RedeclaredField(
+                    name.clone(),
+                    field.name.name.clone(),
+                    field.name.line,
+                    field.name.column,
+                ));
             }
             fields.insert(field.name.name.clone(), field.field_type.clone());
         }
@@ -135,7 +171,11 @@ impl SemanticAnalyzer {
             column: struct_decl.name.column,
         };
         if !self.symbol_table.insert(name.clone(), symbol) {
-            self.errors.push(SemanticError::RedeclaredStruct(name.clone(), struct_decl.name.line, struct_decl.name.column));
+            self.errors.push(SemanticError::RedeclaredStruct(
+                name.clone(),
+                struct_decl.name.line,
+                struct_decl.name.column,
+            ));
         }
     }
 
@@ -155,7 +195,9 @@ impl SemanticAnalyzer {
                 if let Some(else_branch) = &if_stmt.else_block {
                     match else_branch {
                         ElseBranch::Block(block) => self.analyze_statement(block),
-                        ElseBranch::If(if_stmt) => self.analyze_statement(&Statement::If((**if_stmt).clone())),
+                        ElseBranch::If(if_stmt) => {
+                            self.analyze_statement(&Statement::If((**if_stmt).clone()))
+                        }
                     }
                 }
             }
@@ -197,7 +239,11 @@ impl SemanticAnalyzer {
                         _ => return Type::Void, // Or some other appropriate type for non-variables
                     }
                 }
-                self.errors.push(SemanticError::UndeclaredVariable(id.name.clone(), id.line, id.column));
+                self.errors.push(SemanticError::UndeclaredVariable(
+                    id.name.clone(),
+                    id.line,
+                    id.column,
+                ));
                 Type::Void
             }
             Expression::Literal(lit) => match lit {
@@ -211,40 +257,54 @@ impl SemanticAnalyzer {
                 let right_type = self.analyze_expression(right);
                 if left_type != right_type {
                     // This is a simplification. In a real compiler, you'd have more complex type compatibility rules.
-                    self.errors.push(SemanticError::TypeMismatch(left_type.to_string(), right_type.to_string(), 0, 0)); // Add line/col info
+                    self.errors.push(SemanticError::TypeMismatch(
+                        left_type.to_string(),
+                        right_type.to_string(),
+                        0,
+                        0,
+                    )); // Add line/col info
                 }
                 left_type // For simplicity, returning left_type. Should be based on operator.
             }
             Expression::Assignment { target, value } => {
-                if let Some(symbol) = self.symbol_table.lookup(&target.name) {
-                    let target_type = match symbol {
-                        Symbol::Variable { type_, .. } => type_.clone(),
-                        _ => Type::Void,
-                    };
-                    let value_type = self.analyze_expression(value);
-                    if target_type != value_type {
-                        self.errors.push(SemanticError::TypeMismatch(target_type.to_string(), value_type.to_string(), target.line, target.column));
-                    }
-                } else {
-                    self.errors.push(SemanticError::UndeclaredVariable(target.name.clone(), target.line, target.column));
-                }
-                Type::Void
-            }
-            Expression::StructInstantiation { name, fields } => {
-                if let Some(Symbol::Struct { fields: struct_fields, .. }) = self.symbol_table.lookup(&name.name).cloned() {
-                    for (field_name, field_expr) in fields {
-                        if let Some(field_type) = struct_fields.get(&field_name.name) {
-                            let expr_type = self.analyze_expression(field_expr);
-                            if *field_type != expr_type {
-                                self.errors.push(SemanticError::TypeMismatch(field_type.to_string(), expr_type.to_string(), field_name.line, field_name.column));
-                            }
+                // First, get the symbol info without holding the reference
+                let symbol_info =
+                    self.symbol_table
+                        .lookup(&target.name)
+                        .map(|symbol| match symbol {
+                            Symbol::Constant { .. } => (true, symbol.get_type()),
+                            Symbol::Variable { .. } => (false, symbol.get_type()),
+                            _ => (false, Type::Void),
+                        });
+
+                match symbol_info {
+                    Some((is_constant, target_type)) => {
+                        if is_constant {
+                            self.errors.push(SemanticError::InvalidAssignment(
+                                format!("Cannot assign to constant '{}'", target.name),
+                                target.line,
+                                target.column,
+                            ));
                         } else {
-                            self.errors.push(SemanticError::FieldNotFound(name.name.clone(), field_name.name.clone(), field_name.line, field_name.column));
+                            let value_type = self.analyze_expression(value);
+                            if target_type != value_type {
+                                self.errors.push(SemanticError::TypeMismatch(
+                                    target_type.to_string(),
+                                    value_type.to_string(),
+                                    target.line,
+                                    target.column,
+                                ));
+                            }
                         }
                     }
-                    return Type::Void; // Should be a struct type
+                    None => {
+                        self.errors.push(SemanticError::UndeclaredVariable(
+                            target.name.clone(),
+                            target.line,
+                            target.column,
+                        ));
+                    }
                 }
-                self.errors.push(SemanticError::UndefinedStruct(name.name.clone(), name.line, name.column));
                 Type::Void
             }
             Expression::MemberAccess { object, property } => {

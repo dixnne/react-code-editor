@@ -506,6 +506,11 @@ fn semantic_errors_to_proto(errors: &[SemanticError]) -> Vec<compiler::SemanticE
                 line: *line as u32,
                 column: *column as u32,
             },
+            SemanticError::InvalidAssignment(name, line, column) => compiler::SemanticError {
+                message: format!("Invalid assignment to constant: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
             _ => compiler::SemanticError {
                 message: "Unknown semantic error".to_string(),
                 line: 0,
@@ -548,6 +553,13 @@ fn symbol_to_proto(symbol: &Symbol) -> compiler::Symbol {
             name: name.clone(),
             symbol_type: "Struct".to_string(),
             data_type: "".to_string(),
+            line: *line as u32,
+            column: *column as u32,
+        },
+        Symbol::Constant { name, type_, line, column, .. } => compiler::Symbol {
+            name: name.clone(),
+            symbol_type: "Constant".to_string(),
+            data_type: type_.to_string(),
             line: *line as u32,
             column: *column as u32,
         },
