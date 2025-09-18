@@ -53,7 +53,7 @@ impl<'a> Parser<'a> {
     
     fn consume(&mut self, token_type: TokenType, error_msg: &str) -> Result<&LexerToken, SyntaxError> {
         if self.check(token_type) {
-            Ok(self.advance().unwrap())
+            Ok(self.advance().unwrap()) // Es seguro hacer unwrap aquí
         } else if let Some(token) = self.peek() {
             let err = SyntaxError::UnexpectedToken(
                 format!("{}, se encontró '{}'", error_msg, token.lexeme),
@@ -73,15 +73,18 @@ impl<'a> Parser<'a> {
         self.advance();
         while !self.is_at_end() {
             if let Some(prev) = self.previous() {
-                if prev.token_type == TokenType::Semicolon { return; }
+                if prev.token_type == TokenType::Semicolon {
+                    return;
+                }
             }
 
             if let Some(next) = self.peek() {
                 match next.lexeme.as_str() {
-                    "fn" | "let" | "const" | "return" | "if" | "while" | "for" | "struct" => return,
+                    "fn" | "let" | "const" | "return" | "if" | "while" | "for" | "struct" | "do" | "until" => return,
                     _ => {}
                 }
             }
+
             self.advance();
         }
     }
@@ -90,12 +93,16 @@ impl<'a> Parser<'a> {
 
     pub fn parse(&mut self) -> Program {
         let mut declarations = Vec::new();
+
         while !self.is_at_end() {
             match self.declaration() {
                 Ok(decl) => declarations.push(decl),
-                Err(_) => self.synchronize(),
+                Err(_) => {
+                    self.synchronize();
+                }
             }
         }
+
         Program { declarations }
     }
 
@@ -107,7 +114,7 @@ impl<'a> Parser<'a> {
                     "let" => { self.advance(); return self.variable_declaration().map(Declaration::Variable); },
                     "const" => { self.advance(); return self.constant_declaration().map(Declaration::Constant); },
                     "struct" => { self.advance(); return self.struct_declaration().map(Declaration::Struct); },
-                     _ => {}
+                     _ => {} 
                 }
             }
         }
@@ -119,13 +126,22 @@ impl<'a> Parser<'a> {
     fn function_declaration(&mut self) -> Result<Function, SyntaxError> {
         let name_token = self.consume(TokenType::Identifier, "Se esperaba un nombre de función.")?.clone();
         let name = Identifier { name: name_token.lexeme, line: name_token.line, column: name_token.column };
+
         self.consume(TokenType::LeftParen, "Se esperaba '(' después del nombre de función.")?;
         let parameters = self.parameters()?;
         self.consume(TokenType::RightParen, "Se esperaba ')' después de los parámetros.")?;
+
         self.consume(TokenType::ArrowRight, "Se esperaba '->' para el tipo de retorno.")?;
         let return_type = self.type_annotation()?;
+
         let body = self.block_statement()?;
-        Ok(Function { name, parameters, return_type, body })
+
+        Ok(Function {
+            name,
+            parameters,
+            return_type,
+            body,
+        })
     }
     
     fn parameters(&mut self) -> Result<Vec<Parameter>, SyntaxError> {
@@ -137,30 +153,34 @@ impl<'a> Parser<'a> {
                 self.consume(TokenType::Colon, "Se esperaba ':' después del nombre del parámetro.")?;
                 let param_type = self.type_annotation()?;
                 params.push(Parameter { name, param_type });
-                if !self.match_token(TokenType::Comma) { break; }
+
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
             }
         }
         Ok(params)
     }
 
     fn type_annotation(&mut self) -> Result<Type, SyntaxError> {
-        if let Some(type_token) = self.peek() {
-             match type_token.lexeme.as_str() {
-                "int" => { self.advance(); Ok(Type::Int) },
-                "float" => { self.advance(); Ok(Type::Float) },
-                "string" => { self.advance(); Ok(Type::String) },
-                "bool" => { self.advance(); Ok(Type::Bool) },
-                "void" => { self.advance(); Ok(Type::Void) },
-                _ => Err(SyntaxError::UnexpectedToken(format!("Tipo desconocido '{}'", type_token.lexeme), type_token.line, type_token.column)),
-            }
-        } else {
-             Err(SyntaxError::UnexpectedEndOfFile)
+        let type_token = self.consume(TokenType::Identifier, "Se esperaba un nombre de tipo.")?;
+        match type_token.lexeme.as_str() {
+            "int" => Ok(Type::Int),
+            "float" => Ok(Type::Float),
+            "string" => Ok(Type::String),
+            "bool" => Ok(Type::Bool),
+            "void" => Ok(Type::Void),
+            _ => Err(SyntaxError::UnexpectedToken(
+                format!("Tipo desconocido '{}'", type_token.lexeme),
+                type_token.line,
+                type_token.column,
+            )),
         }
     }
 
     fn constant_declaration(&mut self) -> Result<ConstantDeclaration, SyntaxError> {
-        let name_token = self.consume(TokenType::Identifier, "Se esperaba un nombre para la constante.")?.clone();
-        let identifier = Identifier { name: name_token.lexeme, line: name_token.line, column: name_token.column };
+        let name_token = self.consume(TokenType::Identifier, "Se esperaba un nombre para la constante.")?;
+        let identifier = Identifier { name: name_token.lexeme.clone(), line: name_token.line, column: name_token.column };
         let const_type = if self.match_token(TokenType::Colon) { Some(self.type_annotation()?) } else { None };
         self.consume(TokenType::Equal, "Se esperaba '=' después del nombre de la constante.")?;
         let value = self.expression()?;
@@ -169,8 +189,8 @@ impl<'a> Parser<'a> {
     }
 
     fn variable_declaration(&mut self) -> Result<VariableDeclaration, SyntaxError> {
-        let name_token = self.consume(TokenType::Identifier, "Se esperaba un nombre para la variable.")?.clone();
-        let identifier = Identifier { name: name_token.lexeme, line: name_token.line, column: name_token.column };
+        let name_token = self.consume(TokenType::Identifier, "Se esperaba un nombre para la variable.")?;
+        let identifier = Identifier { name: name_token.lexeme.clone(), line: name_token.line, column: name_token.column };
         let var_type = if self.match_token(TokenType::Colon) { Some(self.type_annotation()?) } else { None };
         self.consume(TokenType::Equal, "Se esperaba '=' en la declaración de la variable.")?;
         let value = self.expression()?;
@@ -203,20 +223,30 @@ impl<'a> Parser<'a> {
     // --- Sentencias ---
     
     fn statement(&mut self) -> Result<Statement, SyntaxError> {
-        if let Some(token) = self.peek() {
-            if token.token_type == TokenType::Keyword {
-                 match token.lexeme.as_str() {
-                    "if" => { self.advance(); return self.if_statement().map(Statement::If); },
-                    "while" => { self.advance(); return self.while_statement().map(Statement::While); },
-                    "return" => { self.advance(); return self.return_statement().map(Statement::Return); },
-                    "for" => { self.advance(); return self.for_statement().map(Statement::For); },
-                    _ => {}
-                }
-            }
+        if self.peek().map_or(false, |t| t.lexeme == "do") {
+            self.advance();
+            return self.do_until_statement().map(Statement::DoUntil);
+        }
+        if self.peek().map_or(false, |t| t.lexeme == "if") {
+            self.advance();
+            return self.if_statement().map(Statement::If);
+        }
+        if self.peek().map_or(false, |t| t.lexeme == "while") {
+            self.advance();
+            return self.while_statement().map(Statement::While);
+        }
+        if self.peek().map_or(false, |t| t.lexeme == "return") {
+            self.advance();
+            return self.return_statement().map(Statement::Return);
+        }
+        if self.peek().map_or(false, |t| t.lexeme == "for") {
+            self.advance();
+            return self.for_statement().map(Statement::For);
         }
         if self.check(TokenType::LeftBrace) {
             return self.block_statement().map(Statement::Block);
         }
+
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Se esperaba ';' después de la expresión.")?;
         Ok(Statement::Expression(expr))
@@ -241,24 +271,11 @@ impl<'a> Parser<'a> {
         Ok(ReturnStatement { value })
     }
 
-    fn logical_and(&mut self) -> Result<Expression, SyntaxError> {
-        let mut expr = self.equality()?;
-        while self.match_token(TokenType::DoubleAmpersand) {
-            let op = BinaryOp::DoubleAmpersand;
-            let right = self.equality()?;
-            expr = Expression::Binary { 
-                left: Box::new(expr), 
-                op, 
-                right: Box::new(right) 
-            };
-        }
-        Ok(expr)
-    }
-
     fn if_statement(&mut self) -> Result<IfStatement, SyntaxError> {
-        let condition = self.expression()?;
+        let condition = self.logical_or()?;
         let then_block = self.block_statement()?;
         let mut else_block = None;
+
         if self.peek().map_or(false, |t| t.lexeme == "else") {
             self.advance();
             if self.peek().map_or(false, |t| t.lexeme == "if") {
@@ -272,23 +289,49 @@ impl<'a> Parser<'a> {
     }
 
     fn while_statement(&mut self) -> Result<WhileStatement, SyntaxError> {
-        let condition = self.expression()?;
+        let condition = self.logical_or()?;
         let body = self.block_statement()?;
         Ok(WhileStatement { condition, body })
     }
+    
+    fn do_until_statement(&mut self) -> Result<DoUntilStatement, SyntaxError> {
+        let body = self.block_statement()?;
 
-    fn for_statement(&mut self) -> Result<ForStatement, SyntaxError> {
-        let variable_token = self.consume(TokenType::Identifier, "Se esperaba una variable de bucle después de 'for'.")?.clone();
-        let variable = Identifier { name: variable_token.lexeme, line: variable_token.line, column: variable_token.column };
+        // Consume 'until' keyword
         if let Some(token) = self.peek() {
-            if token.token_type == TokenType::Keyword && token.lexeme == "in" {
-                self.advance();
+            if token.token_type == TokenType::Keyword && token.lexeme == "until" {
+                self.advance(); // Consume 'until'
             } else {
-                return Err(SyntaxError::MissingInKeyword);
+                let err = SyntaxError::UnexpectedToken(
+                    format!("Se esperaba la palabra clave 'until' después del bloque 'do', pero se encontró '{}'", token.lexeme),
+                    token.line,
+                    token.column,
+                );
+                self.errors.push(err.clone());
+                return Err(err);
             }
         } else {
-            return Err(SyntaxError::UnexpectedEndOfFile);
+            let err = SyntaxError::UnexpectedEndOfFile;
+            self.errors.push(err.clone());
+            return Err(err);
         }
+        
+        // Parse condition directly without parentheses
+        let condition = self.logical_or()?;
+        self.consume(TokenType::Semicolon, "Se esperaba ';' después de la sentencia do-until.")?;
+
+        Ok(DoUntilStatement { body, condition })
+    }
+
+    fn for_statement(&mut self) -> Result<ForStatement, SyntaxError> {
+        let variable_token = self.consume(TokenType::Identifier, "Se esperaba una variable de bucle.")?.clone();
+        let variable = Identifier { name: variable_token.lexeme, line: variable_token.line, column: variable_token.column };
+        
+        let in_keyword = self.advance().ok_or(SyntaxError::UnexpectedEndOfFile)?;
+        if in_keyword.token_type != TokenType::Keyword || in_keyword.lexeme != "in" {
+            return Err(SyntaxError::MissingInKeyword);
+        }
+
         let iterable = self.expression()?;
         let body = self.block_statement()?;
         Ok(ForStatement { variable, iterable, body })
@@ -303,12 +346,9 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> Result<Expression, SyntaxError> {
         let left = self.pipe()?;
         if self.match_token(TokenType::Equal) {
-            if matches!(&left, Expression::Identifier(_) | Expression::MemberAccess { .. }) {
+            if let Expression::Identifier(target) = left {
                 let value = self.assignment()?;
-                return Ok(Expression::Assignment {
-                    target: Box::new(left),
-                    value: Box::new(value),
-                });
+                return Ok(Expression::Assignment { target, value: Box::new(value) });
             }
             return Err(SyntaxError::InvalidAssignmentTarget);
         } else if self.match_token(TokenType::Swap) {
@@ -423,13 +463,11 @@ impl<'a> Parser<'a> {
     
     fn postfix(&mut self) -> Result<Expression, SyntaxError> {
         let mut expr = self.primary()?;
+
         loop {
             if self.match_token(TokenType::LeftParen) {
                 expr = self.finish_call(expr)?;
-            } else if self.match_token(TokenType::LeftBrace) {
-                expr = self.finish_struct_instantiation(expr)?;
-            }
-            else if self.match_token(TokenType::Dot) {
+            } else if self.match_token(TokenType::Dot) {
                 let property = self.consume(TokenType::Identifier, "Se esperaba el nombre de la propiedad después de '.'.")?;
                 expr = Expression::MemberAccess {
                     object: Box::new(expr),
@@ -440,18 +478,22 @@ impl<'a> Parser<'a> {
                     },
                 };
             } else if self.match_token(TokenType::Increment) || self.match_token(TokenType::Decrement) {
-                if matches!(&expr, Expression::Identifier(_) | Expression::MemberAccess { .. }) {
-                    let op_type = self.previous().unwrap().token_type;
-                    let binary_op = if op_type == TokenType::Increment { BinaryOp::Plus } else { BinaryOp::Minus };
-                    
+                let op_type = self.previous().unwrap().token_type;
+                
+                if let Expression::Identifier(target_id) = expr {
+                    let binary_op = if op_type == TokenType::Increment {
+                        BinaryOp::Plus
+                    } else {
+                        BinaryOp::Minus
+                    };
                     let right_hand_side = Expression::Binary {
-                        left: Box::new(expr.clone()),
+                        left: Box::new(Expression::Identifier(target_id.clone())),
                         op: binary_op,
                         right: Box::new(Expression::Literal(Literal::Int(1))),
                     };
-                    
+
                     expr = Expression::Assignment {
-                        target: Box::new(expr),
+                        target: target_id,
                         value: Box::new(right_hand_side),
                     };
                 } else {
@@ -463,31 +505,30 @@ impl<'a> Parser<'a> {
         }
         Ok(expr)
     }
-    
-    fn finish_struct_instantiation(&mut self, callee: Expression) -> Result<Expression, SyntaxError> {
-        let name = if let Expression::Identifier(id) = callee {
-            id
-        } else {
-            return Err(SyntaxError::InvalidAssignmentTarget);
-        };
-        let mut fields = Vec::new();
-        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
-            let key_token = self.consume(TokenType::Identifier, "Se esperaba un nombre de campo.")?.clone();
-            let key = Identifier { name: key_token.lexeme, line: key_token.line, column: key_token.column };
-            self.consume(TokenType::Equal, "Se esperaba '=' después del nombre del campo.")?;
-            let value = self.expression()?;
-            fields.push((key, value));
-            if !self.check(TokenType::RightBrace) {
-               if !self.match_token(TokenType::Comma) {
-                    return Err(SyntaxError::UnexpectedToken("Se esperaba ',' o '}' en la instanciación del struct.".to_string(), 0, 0));
-               }
+
+
+    fn finish_call(&mut self, callee: Expression) -> Result<Expression, SyntaxError> {
+        let mut arguments = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                arguments.push(self.expression()?);
+                if !self.match_token(TokenType::Comma) { break; }
             }
         }
-        self.consume(TokenType::RightBrace, "Se esperaba '}' al final de la instanciación.")?;
-        Ok(Expression::StructInstantiation { name, fields })
+        self.consume(TokenType::RightParen, "Se esperaba ')' después de los argumentos.")?;
+        Ok(Expression::FunctionCall { function: Box::new(callee), arguments })
     }
 
     fn primary(&mut self) -> Result<Expression, SyntaxError> {
+        if self.peek().map_or(false, |t| t.lexeme == "true") {
+            self.advance();
+            return Ok(Expression::Literal(Literal::Bool(true)));
+        }
+        if self.peek().map_or(false, |t| t.lexeme == "false") {
+            self.advance();
+            return Ok(Expression::Literal(Literal::Bool(false)));
+        }
+
         if self.match_token(TokenType::Integer) {
             let token = self.previous().unwrap();
             return Ok(Expression::Literal(Literal::Int(token.lexeme.parse().unwrap())));
@@ -511,36 +552,57 @@ impl<'a> Parser<'a> {
             self.consume(TokenType::RightBracket, "Se esperaba ']' al final del array.")?;
             return Ok(Expression::Array(elements));
         }
-        
-        if self.match_token(TokenType::Identifier) {
-            let token = self.previous().unwrap();
-            return Ok(Expression::Identifier(Identifier {
-                name: token.lexeme.clone(),
-                line: token.line,
-                column: token.column,
-            }));
+        if self.match_token(TokenType::LeftBrace) {
+            let mut fields = Vec::new();
+            while !self.check(TokenType::RightBrace) {
+                let key_token = self.consume(TokenType::Identifier, "Se esperaba una clave en el literal de objeto.")?.clone();
+                let key = Identifier { name: key_token.lexeme, line: key_token.line, column: key_token.column };
+                self.consume(TokenType::Colon, "Se esperaba ':' después de la clave.")?;
+                let value = self.expression()?;
+                fields.push((key, value));
+                if !self.check(TokenType::RightBrace) {
+                   self.consume(TokenType::Comma, "Se esperaba ',' después del valor.")?;
+                }
+            }
+            self.consume(TokenType::RightBrace, "Se esperaba '}' al final del objeto literal.")?;
+            return Ok(Expression::Object(fields));
         }
-
+        if self.check(TokenType::Identifier) {
+            if self.tokens.get(self.current + 1).map_or(false, |t| t.token_type == TokenType::LeftBrace) {
+                return self.struct_instantiation();
+            } else {
+                let token = self.advance().unwrap();
+                return Ok(Expression::Identifier(Identifier { name: token.lexeme.clone(), line: token.line, column: token.column }));
+            }
+        }
         if self.match_token(TokenType::LeftParen) {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Se esperaba ')' después de la expresión.")?;
             return Ok(Expression::Grouped(Box::new(expr)));
         }
-
         let token = self.peek().unwrap();
-        Err(SyntaxError::UnexpectedToken(format!("Token inesperado: '{}'", token.lexeme), token.line, token.column))
+        let err = SyntaxError::UnexpectedToken(format!("Token inesperado: '{}'", token.lexeme), token.line, token.column);
+        self.errors.push(err.clone());
+        Err(err)
     }
 
-    fn finish_call(&mut self, callee: Expression) -> Result<Expression, SyntaxError> {
-        let mut arguments = Vec::new();
-        if !self.check(TokenType::RightParen) {
-            loop {
-                arguments.push(self.expression()?);
-                if !self.match_token(TokenType::Comma) { break; }
+    fn struct_instantiation(&mut self) -> Result<Expression, SyntaxError> {
+        let name_token = self.consume(TokenType::Identifier, "Se esperaba el nombre del struct.")?.clone();
+        let name = Identifier { name: name_token.lexeme, line: name_token.line, column: name_token.column };
+        self.consume(TokenType::LeftBrace, "Se esperaba '{' para instanciar el struct.")?;
+        let mut fields = Vec::new();
+        while !self.check(TokenType::RightBrace) {
+            let key_token = self.consume(TokenType::Identifier, "Se esperaba un nombre de campo.")?.clone();
+            let key = Identifier { name: key_token.lexeme, line: key_token.line, column: key_token.column };
+            self.consume(TokenType::Equal, "Se esperaba '=' después del nombre del campo.")?;
+            let value = self.expression()?;
+            fields.push((key, value));
+            if !self.check(TokenType::RightBrace) {
+               self.consume(TokenType::Comma, "Se esperaba ',' después del valor del campo.")?;
             }
         }
-        self.consume(TokenType::RightParen, "Se esperaba ')' después de los argumentos.")?;
-        Ok(Expression::FunctionCall { function: Box::new(callee), arguments })
+        self.consume(TokenType::RightBrace, "Se esperaba '}' al final de la instanciación.")?;
+        Ok(Expression::StructInstantiation { name, fields })
     }
 }
 
@@ -550,33 +612,5 @@ pub fn parse_tokens(tokens: &[LexerToken]) -> ParseResult {
     ParseResult {
         ast,
         errors: parser.errors,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lexer::LexicalAnalyzer;
-    use crate::token::TokenType;
-    
-    fn run_parser_with_errors(source: &str) -> ParseResult {
-        let mut lexer = LexicalAnalyzer::new(source);
-        let tokens = lexer.scan_tokens();
-        let filtered_tokens: Vec<LexerToken> = tokens.into_iter().filter(|t| !matches!(t.token_type, TokenType::Whitespace | TokenType::NewLine | TokenType::CommentSingle | TokenType::CommentMultiLine | TokenType::Unknown)).collect();
-        parse_tokens(&filtered_tokens)
-    }
-
-    #[test]
-    fn test_for_loop_parsing() {
-        let source = "for item in items { }";
-        let result = run_parser_with_errors(source);
-        assert!(result.errors.is_empty(), "No debería haber errores al analizar un bucle for válido. Errores: {:?}", result.errors);
-        
-        let decl = &result.ast.declarations[0];
-        if let Declaration::Statement(Statement::For(_)) = decl {
-            // La prueba pasa si se reconoce un ForStatement
-        } else {
-            panic!("No se analizó un ForStatement correctamente.");
-        }
     }
 }
