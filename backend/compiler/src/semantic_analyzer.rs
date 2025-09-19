@@ -12,11 +12,19 @@ pub enum SemanticError {
     RedeclaredField(String, String, usize, usize),
     FieldNotFound(String, String, usize, usize),
     InvalidMemberAccess(String, usize, usize),
+    InvalidFunctionCallTarget(usize, usize),
+    UndefinedFunction(String, usize, usize),
+    ArgumentCountMismatch(String, usize, usize, usize, usize),
+    ArgumentTypeMismatch(String, usize, String, String, usize, usize),
+    ReturnOutsideFunction(usize, usize),
+    ReturnTypeMismatch(String, String, usize, usize),
+    MissingReturnStatement(String, usize, usize),
 }
 
 pub struct SemanticAnalyzer {
     pub symbol_table: SymbolTable,
     pub errors: Vec<SemanticError>,
+    current_function: Option<(String, Type)>, // (function name, return type)
 }
 
 impl SemanticAnalyzer {
@@ -24,6 +32,7 @@ impl SemanticAnalyzer {
         SemanticAnalyzer {
             symbol_table: SymbolTable::new(),
             errors: Vec::new(),
+            current_function: None,
         }
     }
 
@@ -111,10 +120,11 @@ impl SemanticAnalyzer {
             .iter()
             .map(|p| p.param_type.clone())
             .collect();
+        let return_type = func_decl.return_type.clone();
         let symbol = Symbol::Function {
             name: name.clone(),
-            parameters,
-            return_type: func_decl.return_type.clone(),
+            parameters: parameters.clone(),
+            return_type: return_type.clone(),
             line: func_decl.name.line,
             column: func_decl.name.column,
         };
@@ -126,6 +136,10 @@ impl SemanticAnalyzer {
                 func_decl.name.column,
             ));
         }
+
+        // Set current function context
+        let previous_function = self.current_function.take();
+        self.current_function = Some((name.clone(), return_type.clone()));
 
         self.symbol_table.enter_scope();
         for param in &func_decl.parameters {
@@ -145,8 +159,61 @@ impl SemanticAnalyzer {
                 ));
             }
         }
-        self.analyze_block(&func_decl.body);
+
+        // Analyze function body and track returns
+        let mut has_return = false;
+        self.analyze_block_with_return_check(&func_decl.body, &mut has_return);
+
+        // Check if non-void function has at least one return statement
+        // Note: This is a simple check and doesn't account for control flow
+        if return_type != Type::Void && !has_return {
+            // We would need to implement more sophisticated control flow analysis
+            // to properly check if all paths return a value
+            // For now, we'll just add a placeholder check
+            self.errors.push(SemanticError::MissingReturnStatement(
+                name.clone(),
+                func_decl.name.line,
+                func_decl.name.column,
+            ));
+        }
+
         self.symbol_table.leave_scope();
+
+        // Restore previous function context
+        self.current_function = previous_function;
+    }
+
+    fn analyze_block_with_return_check(&mut self, block: &Block, has_return: &mut bool) {
+        for decl in &block.statements {
+            if let Declaration::Statement(stmt) = decl {
+                self.analyze_statement_with_return_check(stmt, has_return);
+            } else {
+                self.analyze_declaration(decl);
+            }
+        }
+    }
+
+    fn analyze_statement_with_return_check(&mut self, stmt: &Statement, has_return: &mut bool) {
+        match stmt {
+            Statement::Return(_) => *has_return = true,
+            Statement::Block(block) => self.analyze_block_with_return_check(block, has_return),
+            Statement::If(if_stmt) => {
+                self.analyze_statement_with_return_check(&Statement::Block(if_stmt.then_block.clone()), has_return);
+                if let Some(else_branch) = &if_stmt.else_block {
+                    match else_branch {
+                        ElseBranch::Block(block) => {
+                            self.analyze_statement_with_return_check(block, has_return)
+                        }
+                        ElseBranch::If(if_stmt) => self.analyze_statement_with_return_check(
+                            &Statement::If(*if_stmt.clone()),
+                            has_return,
+                        ),
+                    }
+                }
+            }
+            // Handle other statement types...
+            _ => self.analyze_statement(stmt),
+        }
     }
 
     fn analyze_struct_declaration(&mut self, struct_decl: &StructDeclaration) {
@@ -204,6 +271,25 @@ impl SemanticAnalyzer {
             Statement::While(while_stmt) => {
                 self.analyze_expression(&while_stmt.condition);
                 self.analyze_block(&while_stmt.body);
+            }
+            Statement::Return(return_stmt) => {
+                let (line, column) = return_stmt.value.get_line_col();
+                // Check if we're inside a function
+                if let Some((fn_name, return_type)) = &self.current_function {
+                    let return_type = return_type.clone();
+                    let expr_type = self.analyze_expression(&return_stmt.value);
+                    if expr_type != return_type {
+                        self.errors.push(SemanticError::ReturnTypeMismatch(
+                            return_type.to_string(),
+                            expr_type.to_string(),
+                            line,
+                            column,
+                        ));
+                    }
+                } else {
+                    self.errors
+                        .push(SemanticError::ReturnOutsideFunction(line, column));
+                }
             }
             Statement::For(for_stmt) => {
                 self.symbol_table.enter_scope();
@@ -311,6 +397,83 @@ impl SemanticAnalyzer {
                 let object_type = self.analyze_expression(object);
                 // This is a simplification. You would need to get the struct definition and check the field.
                 Type::Void
+            }
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
+                let fn_identifier = match &**function {
+                    Expression::Identifier(ident) => ident,
+                    _ => {
+                        self.errors.push(SemanticError::InvalidFunctionCallTarget(
+                            function.get_line_col().0,
+                            function.get_line_col().1,
+                        ));
+                        return Type::Void;
+                    }
+                };
+
+                if let Some(symbol) = self.symbol_table.lookup(&fn_identifier.name) {
+                    match symbol {
+                        Symbol::Function {
+                            name: fn_name_sym,
+                            parameters: parameters_sym,
+                            return_type: return_type_sym,
+                            ..
+                        } => {
+                            let fn_name = fn_name_sym.clone();
+                            let parameters = parameters_sym.clone();
+                            let return_type = return_type_sym.clone();
+
+                            // Check argument count
+                            if arguments.len() != parameters.len() {
+                                self.errors.push(SemanticError::ArgumentCountMismatch(
+                                    fn_name.to_string(),
+                                    parameters.len(),
+                                    arguments.len(),
+                                    fn_identifier.line,
+                                    fn_identifier.column,
+                                ));
+                                return return_type.clone();
+                            }
+
+                            // Check argument types
+                            let param_types = parameters.clone();
+                            for (i, (arg, param_type)) in
+                                arguments.iter().zip(param_types.iter()).enumerate()
+                            {
+                                let arg_type = self.analyze_expression(arg);
+                                if arg_type != *param_type {
+                                    self.errors.push(SemanticError::ArgumentTypeMismatch(
+                                        fn_name.clone(),
+                                        i,
+                                        param_type.to_string(),
+                                        arg_type.to_string(),
+                                        fn_identifier.line,
+                                        fn_identifier.column,
+                                    ));
+                                }
+                            }
+
+                            return_type.clone()
+                        }
+                        _ => {
+                            self.errors.push(SemanticError::UndefinedFunction(
+                                fn_identifier.name.clone(),
+                                fn_identifier.line,
+                                fn_identifier.column,
+                            ));
+                            Type::Void
+                        }
+                    }
+                } else {
+                    self.errors.push(SemanticError::UndefinedFunction(
+                        fn_identifier.name.clone(),
+                        fn_identifier.line,
+                        fn_identifier.column,
+                    ));
+                    Type::Void
+                }
             }
             _ => Type::Void,
         }

@@ -96,6 +96,25 @@ pub enum Expression {
     },
 }
 
+impl Expression {
+    pub fn get_line_col(&self) -> (usize, usize) {
+        match self {
+            Expression::Identifier(ident) => (ident.line, ident.column),
+            Expression::Literal(_) => (0, 0), // Placeholder, refine if literals need specific line/col
+            Expression::Binary { left, .. } => left.get_line_col(),
+            Expression::Unary { expr, .. } => expr.get_line_col(),
+            Expression::Assignment { target, .. } => (target.line, target.column),
+            Expression::Grouped(expr) => expr.get_line_col(),
+            Expression::FunctionCall { function, .. } => function.get_line_col(),
+            Expression::Array(elements) => elements.first().map_or((0, 0), |e| e.get_line_col()),
+            Expression::Object(fields) => fields.first().map_or((0, 0), |(ident, _)| (ident.line, ident.column)),
+            Expression::Splat(expr) => expr.get_line_col(),
+            Expression::StructInstantiation { name, .. } => (name.line, name.column),
+            Expression::MemberAccess { object, .. } => object.get_line_col(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Int(i64),

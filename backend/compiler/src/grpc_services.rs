@@ -511,14 +511,73 @@ fn semantic_errors_to_proto(errors: &[SemanticError]) -> Vec<compiler::SemanticE
                 line: *line as u32,
                 column: *column as u32,
             },
-            _ => compiler::SemanticError {
-                message: "Unknown semantic error".to_string(),
-                line: 0,
-                column: 0,
+            SemanticError::UndefinedStruct(name, line, column) => compiler::SemanticError {
+                message: format!("Undefined struct: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::RedeclaredStruct(name, line, column) => compiler::SemanticError {
+                message: format!("Redeclared struct: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::RedeclaredField(struct_name, field_name, line, column) => compiler::SemanticError {
+                message: format!("Redeclared field '{}' in struct '{}'", field_name, struct_name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::FieldNotFound(struct_name, field_name, line, column) => compiler::SemanticError {
+                message: format!("Field '{}' not found in struct '{}'", field_name, struct_name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::InvalidMemberAccess(name, line, column) => compiler::SemanticError {
+                message: format!("Invalid member access: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::InvalidFunctionCallTarget(line, column) => compiler::SemanticError {
+                message: "Invalid function call target".to_string(),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::UndefinedFunction(name, line, column) => compiler::SemanticError {
+                message: format!("Undefined function: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::ArgumentCountMismatch(func_name, expected, found, line, column) => compiler::SemanticError {
+                message: format!("Argument count mismatch in function '{}': expected {}, found {}", func_name, expected, found),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::ArgumentTypeMismatch(func_name, arg_index, expected, found, line, column) => compiler::SemanticError {
+                message: format!(
+                    "Argument type mismatch in function '{}' at argument {}: expected {}, found {}",
+                    func_name, arg_index, expected, found
+                ),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::ReturnOutsideFunction(line, column) => compiler::SemanticError {
+                message: "Return statement outside function".to_string(),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::ReturnTypeMismatch(expected, found, line, column) => compiler::SemanticError {
+                message: format!("Return type mismatch: expected {}, found {}", expected, found),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            SemanticError::MissingReturnStatement(func_name, line, column) => compiler::SemanticError {
+                message: format!("Missing return statement in function '{}'", func_name),
+                line: *line as u32,
+                column: *column as u32,
             },
         })
         .collect()
 }
+
 
 fn symbol_table_to_proto(table: &SymbolTable) -> compiler::SymbolTable {
     compiler::SymbolTable {
