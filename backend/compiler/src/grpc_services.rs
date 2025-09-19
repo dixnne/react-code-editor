@@ -574,6 +574,16 @@ fn semantic_errors_to_proto(errors: &[SemanticError]) -> Vec<compiler::SemanticE
                 line: *line as u32,
                 column: *column as u32,
             },
+            SemanticError::MissingMainFunction => compiler::SemanticError {
+                message: "Missing 'main' function".to_string(),
+                line: 0,
+                column: 0,
+            },
+            SemanticError::InvalidMainFunctionSignature(reason, line, column) => compiler::SemanticError {
+                message: format!("Invalid 'main' function signature: {}", reason),
+                line: *line as u32,
+                column: *column as u32,
+            },
         })
         .collect()
 }

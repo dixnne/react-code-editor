@@ -19,6 +19,8 @@ pub enum SemanticError {
     ReturnOutsideFunction(usize, usize),
     ReturnTypeMismatch(String, String, usize, usize),
     MissingReturnStatement(String, usize, usize),
+    MissingMainFunction,
+    InvalidMainFunctionSignature(String, usize, usize),
 }
 
 pub struct SemanticAnalyzer {
@@ -39,6 +41,60 @@ impl SemanticAnalyzer {
     pub fn analyze(&mut self, program: &Program) {
         for declaration in &program.declarations {
             self.analyze_declaration(declaration);
+        }
+        self.check_for_main_function();
+    }
+
+    fn check_for_main_function(&mut self) {
+        match self.symbol_table.lookup("main") {
+            Some(symbol) => {
+                // A symbol named 'main' was found, now check if it's a valid function
+                if let Symbol::Function {
+                    parameters,
+                    return_type,
+                    line,
+                    column,
+                    ..
+                } = symbol
+                {
+                    let mut signature_errors = Vec::new();
+
+                    // 1. Check if the function takes any parameters
+                    if !parameters.is_empty() {
+                        signature_errors.push(format!(
+                            "expected 0 parameters but found {}",
+                            parameters.len()
+                        ));
+                    }
+
+                    // 2. Check if the function returns 'Int'
+                    if *return_type != Type::Int {
+                        signature_errors.push(format!(
+                            "expected a 'Int' return type but found '{}'",
+                            return_type.to_string()
+                        ));
+                    }
+
+                    // 3. If there are any signature errors, report them
+                    if !signature_errors.is_empty() {
+                        let reason = format!(
+                            "Invalid 'main' function signature: {}",
+                            signature_errors.join(" and ")
+                        );
+                        self.errors
+                            .push(SemanticError::InvalidMainFunctionSignature(
+                                reason, *line, *column,
+                            ));
+                    }
+                } else {
+                    // A symbol 'main' exists, but it is not a function (e.g., a variable)
+                    self.errors.push(SemanticError::MissingMainFunction);
+                }
+            }
+            None => {
+                // No symbol named 'main' was found in the global scope
+                self.errors.push(SemanticError::MissingMainFunction);
+            }
         }
     }
 
@@ -198,7 +254,10 @@ impl SemanticAnalyzer {
             Statement::Return(_) => *has_return = true,
             Statement::Block(block) => self.analyze_block_with_return_check(block, has_return),
             Statement::If(if_stmt) => {
-                self.analyze_statement_with_return_check(&Statement::Block(if_stmt.then_block.clone()), has_return);
+                self.analyze_statement_with_return_check(
+                    &Statement::Block(if_stmt.then_block.clone()),
+                    has_return,
+                );
                 if let Some(else_branch) = &if_stmt.else_block {
                     match else_branch {
                         ElseBranch::Block(block) => {
