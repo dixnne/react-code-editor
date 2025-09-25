@@ -1,11 +1,26 @@
 syntax = "proto3";
+
 package compiler;
 
 import "lexer.proto";
+import "semantic.proto";
 
 service Parser {
   rpc Parse (ParseRequest) returns (ParseResponse);
   rpc ParseSource (ParseSourceRequest) returns (ParseResponse);
+}
+
+service Compiler {
+  rpc Compile(CompilerRequest) returns (CompilerResponse);
+}
+
+message CompilerRequest {
+  string source = 1;
+}
+
+message CompilerResponse {
+  ParseResponse parse_response = 1;
+  SemanticAnalysisResponse semantic_response = 2;
 }
 
 message ParseRequest {
