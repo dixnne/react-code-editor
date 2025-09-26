@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::ast::{Type};
+use crate::ast::{Literal, Type};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Symbol {
@@ -9,6 +9,7 @@ pub enum Symbol {
         defined: bool,
         line: usize,
         column: usize,
+        value: Option<Literal>,
     },
     Function {
         name: String,
@@ -28,6 +29,7 @@ pub enum Symbol {
         type_: Type,
         line: usize,
         column: usize,
+        value: Option<Literal>,
     },
 }
 
@@ -51,14 +53,31 @@ pub struct Scope {
     pub symbols: HashMap<String, Symbol>,
     pub parent: Option<Box<Scope>>,
     pub children: Vec<Scope>,
+    pub name: String,
+    pub level: usize,
+}
+
+impl Default for Scope {
+    fn default() -> Self {
+        Self {
+            symbols: HashMap::new(),
+            parent: None,
+            children: Vec::new(),
+            name: "".to_string(),
+            level: 0,
+        }
+    }
 }
 
 impl Scope {
-    pub fn new(parent: Option<Box<Scope>>) -> Self {
+    pub fn new(parent: Option<Box<Scope>>, name: String) -> Self {
+        let level = parent.as_ref().map_or(0, |p| p.level + 1);
         Scope {
             symbols: HashMap::new(),
             parent,
             children: Vec::new(),
+            name,
+            level,
         }
     }
 
@@ -81,20 +100,19 @@ pub struct SymbolTable {
 impl SymbolTable {
     pub fn new() -> Self {
         SymbolTable {
-            current_scope: Scope::new(None),
+            current_scope: Scope::new(None, "global".to_string()),
         }
     }
 
-    pub fn enter_scope(&mut self) {
-        let new_scope = Scope::new(Some(Box::new(self.current_scope.clone())));
-        self.current_scope = new_scope;
+    pub fn enter_scope(&mut self, name: String) {
+        let old_scope = std::mem::take(&mut self.current_scope);
+        self.current_scope = Scope::new(Some(Box::new(old_scope)), name);
     }
 
     pub fn leave_scope(&mut self) {
         if let Some(parent) = self.current_scope.parent.take() {
-            let mut parent = *parent;
-            parent.children.push(self.current_scope.clone());
-            self.current_scope = parent;
+            let child = std::mem::replace(&mut self.current_scope, *parent);
+            self.current_scope.children.push(child);
         }
     }
 

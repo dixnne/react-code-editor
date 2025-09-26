@@ -122,12 +122,19 @@ impl SemanticAnalyzer {
             ));
         }
 
+        let literal_value = if let Expression::Literal(lit) = &var_decl.value {
+            Some(lit.clone())
+        } else {
+            None
+        };
+
         let symbol = Symbol::Variable {
             name: name.clone(),
             type_: value_type.clone(),
             defined: true,
             line: var_decl.identifier.line,
             column: var_decl.identifier.column,
+            value: literal_value,
         };
         if !self.symbol_table.insert(name.clone(), symbol) {
             self.errors.push(SemanticError::RedeclaredVariable(
@@ -163,11 +170,18 @@ impl SemanticAnalyzer {
             ));
         }
 
+        let literal_value = if let Expression::Literal(lit) = &const_decl.value {
+            Some(lit.clone())
+        } else {
+            None
+        };
+
         let symbol = Symbol::Constant {
             name: name.clone(),
             type_: value_type.clone(),
             line: const_decl.identifier.line,
             column: const_decl.identifier.column,
+            value: literal_value,
         };
 
         if !self.symbol_table.insert(name.clone(), symbol) {
@@ -219,7 +233,7 @@ impl SemanticAnalyzer {
         let previous_function = self.current_function.take();
         self.current_function = Some((name.clone(), return_type.clone()));
 
-        self.symbol_table.enter_scope();
+        self.symbol_table.enter_scope(format!("function: {}", name));
         let params_nodes: Vec<AnnotatedNode> = func_decl
             .parameters
             .iter()
@@ -231,6 +245,7 @@ impl SemanticAnalyzer {
                     defined: true,
                     line: p.name.line,
                     column: p.name.column,
+                    value: None,
                 };
                 if !self.symbol_table.insert(param_name.clone(), param_symbol) {
                     self.errors.push(SemanticError::RedeclaredVariable(
@@ -287,6 +302,7 @@ impl SemanticAnalyzer {
         block: &Block,
         has_return: &mut bool,
     ) -> AnnotatedNode {
+        self.symbol_table.enter_scope("block".to_string());
         let mut children = vec![];
         for decl in &block.statements {
             if let Declaration::Statement(stmt) = decl {
@@ -295,6 +311,7 @@ impl SemanticAnalyzer {
                 children.push(self.analyze_declaration(decl));
             }
         }
+        self.symbol_table.leave_scope();
         AnnotatedNode {
             node_type: "Block".to_string(),
             children,
@@ -397,12 +414,7 @@ impl SemanticAnalyzer {
     fn analyze_statement(&mut self, statement: &Statement) -> AnnotatedNode {
         match statement {
             Statement::Expression(expr) => self.analyze_expression(expr),
-            Statement::Block(block) => {
-                self.symbol_table.enter_scope();
-                let node = self.analyze_block(block);
-                self.symbol_table.leave_scope();
-                node
-            }
+            Statement::Block(block) => self.analyze_block(block),
             Statement::If(if_stmt) => {
                 let cond_node = self.analyze_expression(&if_stmt.condition);
                 let then_node = self.analyze_block(&if_stmt.then_block);
@@ -433,7 +445,7 @@ impl SemanticAnalyzer {
             }
             Statement::Return(return_stmt) => self.analyze_return_statement(return_stmt),
             Statement::For(for_stmt) => {
-                self.symbol_table.enter_scope();
+                self.symbol_table.enter_scope("for_loop".to_string());
                 let var_name = &for_stmt.variable.name;
                 let symbol = Symbol::Variable {
                     name: var_name.clone(),
@@ -441,6 +453,7 @@ impl SemanticAnalyzer {
                     defined: true,
                     line: for_stmt.variable.line,
                     column: for_stmt.variable.column,
+                    value: None,
                 };
                 self.symbol_table.insert(var_name.clone(), symbol);
                 let iterable_node = self.analyze_expression(&for_stmt.iterable);
@@ -485,11 +498,13 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_block(&mut self, block: &Block) -> AnnotatedNode {
+        self.symbol_table.enter_scope("block".to_string());
         let children = block
             .statements
             .iter()
             .map(|d| self.analyze_declaration(d))
             .collect();
+        self.symbol_table.leave_scope();
         AnnotatedNode {
             node_type: "Block".to_string(),
             children,

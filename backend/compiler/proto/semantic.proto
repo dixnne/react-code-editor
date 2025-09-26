@@ -14,11 +14,15 @@ message Symbol {
     string data_type = 3;
     uint32 line = 4;
     uint32 column = 5;
+    optional string value = 6;
+    uint32 scope_level = 7;
 }
 
 message Scope {
-    repeated Symbol symbols = 1;
-    repeated Scope children = 2;
+    string scope_name = 1;
+    uint32 scope_level = 2;
+    repeated Symbol symbols = 3;
+    repeated Scope children = 4;
 }
 
 message SymbolTable {

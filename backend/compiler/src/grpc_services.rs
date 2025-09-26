@@ -1,5 +1,6 @@
 // Este archivo ahora sirve como el punto central para tus servicios gRPC.
 
+use crate::ast;
 use crate::ast::*;
 use crate::lexer::LexicalAnalyzer;
 use crate::parser::parse_tokens;
@@ -749,63 +750,89 @@ fn symbol_table_to_proto(table: &SymbolTable) -> compiler::SymbolTable {
 
 fn scope_to_proto(scope: &Scope) -> compiler::Scope {
     compiler::Scope {
-        symbols: scope.symbols.values().map(symbol_to_proto).collect(),
+        scope_name: scope.name.clone(),
+        scope_level: scope.level as u32,
+        symbols: scope.symbols.values().map(|s| symbol_to_proto(s, scope.level)).collect(),
         children: scope.children.iter().map(scope_to_proto).collect(),
     }
 }
 
-fn symbol_to_proto(symbol: &Symbol) -> compiler::Symbol {
+fn symbol_to_proto(symbol: &Symbol, scope_level: usize) -> compiler::Symbol {
+    let value_str = match symbol {
+        Symbol::Variable { value, .. } => value.as_ref().map(|v| match v {
+            ast::Literal::Int(i) => i.to_string(),
+            ast::Literal::Float(f) => f.to_string(),
+            ast::Literal::String(s) => s.clone(),
+            ast::Literal::Bool(b) => b.to_string(),
+        }),
+        Symbol::Constant { value, .. } => value.as_ref().map(|v| match v {
+            ast::Literal::Int(i) => i.to_string(),
+            ast::Literal::Float(f) => f.to_string(),
+            ast::Literal::String(s) => s.clone(),
+            ast::Literal::Bool(b) => b.to_string(),
+        }),
+        _ => None,
+    };
+
     match symbol {
         Symbol::Variable {
             name,
             type_,
             line,
             column,
-            ..
+            ..            
         } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Variable".to_string(),
             data_type: type_.to_string(),
             line: *line as u32,
             column: *column as u32,
+            value: value_str,
+            scope_level: scope_level as u32,
         },
         Symbol::Function {
             name,
             return_type,
             line,
             column,
-            ..
+            ..            
         } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Function".to_string(),
             data_type: return_type.to_string(),
             line: *line as u32,
             column: *column as u32,
+            value: None,
+            scope_level: scope_level as u32,
         },
         Symbol::Struct {
             name,
             line,
             column,
-            ..
+            ..            
         } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Struct".to_string(),
             data_type: "".to_string(),
             line: *line as u32,
             column: *column as u32,
+            value: None,
+            scope_level: scope_level as u32,
         },
         Symbol::Constant {
             name,
             type_,
             line,
             column,
-            ..
+            ..            
         } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Constant".to_string(),
             data_type: type_.to_string(),
             line: *line as u32,
             column: *column as u32,
+            value: value_str,
+            scope_level: scope_level as u32,
         },
     }
 }
