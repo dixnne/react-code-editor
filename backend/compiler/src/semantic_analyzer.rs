@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::grpc_services::compiler::AnnotatedNode;
 use crate::symbol_table::{Symbol, SymbolTable};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,17 +39,23 @@ impl SemanticAnalyzer {
         }
     }
 
-    pub fn analyze(&mut self, program: &Program) {
-        for declaration in &program.declarations {
-            self.analyze_declaration(declaration);
-        }
+    pub fn analyze(&mut self, program: &Program) -> AnnotatedNode {
+        let children = program
+            .declarations
+            .iter()
+            .map(|d| self.analyze_declaration(d))
+            .collect();
         self.check_for_main_function();
+        AnnotatedNode {
+            node_type: "Program".to_string(),
+            children,
+            ..Default::default()
+        }
     }
 
     fn check_for_main_function(&mut self) {
         match self.symbol_table.lookup("main") {
             Some(symbol) => {
-                // A symbol named 'main' was found, now check if it's a valid function
                 if let Symbol::Function {
                     parameters,
                     return_type,
@@ -58,24 +65,18 @@ impl SemanticAnalyzer {
                 } = symbol
                 {
                     let mut signature_errors = Vec::new();
-
-                    // 1. Check if the function takes any parameters
                     if !parameters.is_empty() {
                         signature_errors.push(format!(
                             "expected 0 parameters but found {}",
                             parameters.len()
                         ));
                     }
-
-                    // 2. Check if the function returns 'Int'
                     if *return_type != Type::Int {
                         signature_errors.push(format!(
                             "expected a 'Int' return type but found '{}'",
                             return_type.to_string()
                         ));
                     }
-
-                    // 3. If there are any signature errors, report them
                     if !signature_errors.is_empty() {
                         let reason = format!(
                             "Invalid 'main' function signature: {}",
@@ -87,18 +88,16 @@ impl SemanticAnalyzer {
                             ));
                     }
                 } else {
-                    // A symbol 'main' exists, but it is not a function (e.g., a variable)
                     self.errors.push(SemanticError::MissingMainFunction);
                 }
             }
             None => {
-                // No symbol named 'main' was found in the global scope
                 self.errors.push(SemanticError::MissingMainFunction);
             }
         }
     }
 
-    fn analyze_declaration(&mut self, declaration: &Declaration) {
+    fn analyze_declaration(&mut self, declaration: &Declaration) -> AnnotatedNode {
         match declaration {
             Declaration::Variable(var_decl) => self.analyze_variable_declaration(var_decl),
             Declaration::Function(func_decl) => self.analyze_function_declaration(func_decl),
@@ -108,10 +107,11 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn analyze_variable_declaration(&mut self, var_decl: &VariableDeclaration) {
+    fn analyze_variable_declaration(&mut self, var_decl: &VariableDeclaration) -> AnnotatedNode {
         let name = &var_decl.identifier.name;
         let declared_type = self.get_type(&var_decl.var_type);
-        let value_type = self.analyze_expression(&var_decl.value);
+        let value_node = self.analyze_expression(&var_decl.value);
+        let value_type = Type::from_str(&value_node.inferred_type).unwrap_or(Type::Void);
 
         if declared_type != Type::Void && declared_type != value_type {
             self.errors.push(SemanticError::TypeMismatch(
@@ -124,7 +124,7 @@ impl SemanticAnalyzer {
 
         let symbol = Symbol::Variable {
             name: name.clone(),
-            type_: value_type,
+            type_: value_type.clone(),
             defined: true,
             line: var_decl.identifier.line,
             column: var_decl.identifier.column,
@@ -136,12 +136,23 @@ impl SemanticAnalyzer {
                 var_decl.identifier.column,
             ));
         }
+
+        AnnotatedNode {
+            node_type: "VariableDeclaration".to_string(),
+            value: "let".to_string(),
+            children: vec![self.identifier_to_annotated(&var_decl.identifier), value_node],
+            start_line: var_decl.identifier.line as u32,
+            start_column: var_decl.identifier.column as u32,
+            inferred_type: value_type.to_string(),
+            ..Default::default()
+        }
     }
 
-    fn analyze_constant_declaration(&mut self, const_decl: &ConstantDeclaration) {
+    fn analyze_constant_declaration(&mut self, const_decl: &ConstantDeclaration) -> AnnotatedNode {
         let name = &const_decl.identifier.name;
         let declared_type = self.get_type(&const_decl.const_type);
-        let value_type = self.analyze_expression(&const_decl.value);
+        let value_node = self.analyze_expression(&const_decl.value);
+        let value_type = Type::from_str(&value_node.inferred_type).unwrap_or(Type::Void);
 
         if declared_type != Type::Void && declared_type != value_type {
             self.errors.push(SemanticError::TypeMismatch(
@@ -153,9 +164,8 @@ impl SemanticAnalyzer {
         }
 
         let symbol = Symbol::Constant {
-            // Changed to Constant variant
             name: name.clone(),
-            type_: value_type,
+            type_: value_type.clone(),
             line: const_decl.identifier.line,
             column: const_decl.identifier.column,
         };
@@ -167,9 +177,22 @@ impl SemanticAnalyzer {
                 const_decl.identifier.column,
             ));
         }
+
+        AnnotatedNode {
+            node_type: "ConstantDeclaration".to_string(),
+            value: "const".to_string(),
+            children: vec![
+                self.identifier_to_annotated(&const_decl.identifier),
+                value_node,
+            ],
+            start_line: const_decl.identifier.line as u32,
+            start_column: const_decl.identifier.column as u32,
+            inferred_type: value_type.to_string(),
+            ..Default::default()
+        }
     }
 
-    fn analyze_function_declaration(&mut self, func_decl: &Function) {
+    fn analyze_function_declaration(&mut self, func_decl: &Function) -> AnnotatedNode {
         let name = &func_decl.name.name;
         let parameters: Vec<Type> = func_decl
             .parameters
@@ -193,39 +216,44 @@ impl SemanticAnalyzer {
             ));
         }
 
-        // Set current function context
         let previous_function = self.current_function.take();
         self.current_function = Some((name.clone(), return_type.clone()));
 
         self.symbol_table.enter_scope();
-        for param in &func_decl.parameters {
-            let param_name = &param.name.name;
-            let param_symbol = Symbol::Variable {
-                name: param_name.clone(),
-                type_: param.param_type.clone(),
-                defined: true,
-                line: param.name.line,
-                column: param.name.column,
-            };
-            if !self.symbol_table.insert(param_name.clone(), param_symbol) {
-                self.errors.push(SemanticError::RedeclaredVariable(
-                    param_name.clone(),
-                    param.name.line,
-                    param.name.column,
-                ));
-            }
-        }
+        let params_nodes: Vec<AnnotatedNode> = func_decl
+            .parameters
+            .iter()
+            .map(|p| {
+                let param_name = &p.name.name;
+                let param_symbol = Symbol::Variable {
+                    name: param_name.clone(),
+                    type_: p.param_type.clone(),
+                    defined: true,
+                    line: p.name.line,
+                    column: p.name.column,
+                };
+                if !self.symbol_table.insert(param_name.clone(), param_symbol) {
+                    self.errors.push(SemanticError::RedeclaredVariable(
+                        param_name.clone(),
+                        p.name.line,
+                        p.name.column,
+                    ));
+                }
+                AnnotatedNode {
+                    node_type: "Parameter".to_string(),
+                    value: p.name.name.clone(),
+                    inferred_type: p.param_type.to_string(),
+                    start_line: p.name.line as u32,
+                    start_column: p.name.column as u32,
+                    ..Default::default()
+                }
+            })
+            .collect();
 
-        // Analyze function body and track returns
         let mut has_return = false;
-        self.analyze_block_with_return_check(&func_decl.body, &mut has_return);
+        let body_node = self.analyze_block_with_return_check(&func_decl.body, &mut has_return);
 
-        // Check if non-void function has at least one return statement
-        // Note: This is a simple check and doesn't account for control flow
         if return_type != Type::Void && !has_return {
-            // We would need to implement more sophisticated control flow analysis
-            // to properly check if all paths return a value
-            // For now, we'll just add a placeholder check
             self.errors.push(SemanticError::MissingReturnStatement(
                 name.clone(),
                 func_decl.name.line,
@@ -234,50 +262,94 @@ impl SemanticAnalyzer {
         }
 
         self.symbol_table.leave_scope();
-
-        // Restore previous function context
         self.current_function = previous_function;
-    }
 
-    fn analyze_block_with_return_check(&mut self, block: &Block, has_return: &mut bool) {
-        for decl in &block.statements {
-            if let Declaration::Statement(stmt) = decl {
-                self.analyze_statement_with_return_check(stmt, has_return);
-            } else {
-                self.analyze_declaration(decl);
-            }
+        AnnotatedNode {
+            node_type: "FunctionDeclaration".to_string(),
+            value: name.clone(),
+            children: vec![
+                AnnotatedNode {
+                    node_type: "Parameters".to_string(),
+                    children: params_nodes,
+                    ..Default::default()
+                },
+                body_node,
+            ],
+            start_line: func_decl.name.line as u32,
+            start_column: func_decl.name.column as u32,
+            inferred_type: return_type.to_string(),
+            ..Default::default()
         }
     }
 
-    fn analyze_statement_with_return_check(&mut self, stmt: &Statement, has_return: &mut bool) {
+    fn analyze_block_with_return_check(
+        &mut self,
+        block: &Block,
+        has_return: &mut bool,
+    ) -> AnnotatedNode {
+        let mut children = vec![];
+        for decl in &block.statements {
+            if let Declaration::Statement(stmt) = decl {
+                children.push(self.analyze_statement_with_return_check(stmt, has_return));
+            } else {
+                children.push(self.analyze_declaration(decl));
+            }
+        }
+        AnnotatedNode {
+            node_type: "Block".to_string(),
+            children,
+            ..Default::default()
+        }
+    }
+
+    fn analyze_statement_with_return_check(
+        &mut self,
+        stmt: &Statement,
+        has_return: &mut bool,
+    ) -> AnnotatedNode {
         match stmt {
-            Statement::Return(_) => *has_return = true,
+            Statement::Return(r) => {
+                *has_return = true;
+                self.analyze_return_statement(r)
+            }
             Statement::Block(block) => self.analyze_block_with_return_check(block, has_return),
             Statement::If(if_stmt) => {
-                self.analyze_statement_with_return_check(
+                let then_node = self.analyze_statement_with_return_check(
                     &Statement::Block(if_stmt.then_block.clone()),
                     has_return,
                 );
-                if let Some(else_branch) = &if_stmt.else_block {
+                let else_node = if let Some(else_branch) = &if_stmt.else_block {
                     match else_branch {
                         ElseBranch::Block(block) => {
-                            self.analyze_statement_with_return_check(block, has_return)
+                            Some(self.analyze_statement_with_return_check(block, has_return))
                         }
-                        ElseBranch::If(if_stmt) => self.analyze_statement_with_return_check(
+                        ElseBranch::If(if_stmt) => Some(self.analyze_statement_with_return_check(
                             &Statement::If(*if_stmt.clone()),
                             has_return,
-                        ),
+                        )),
                     }
+                } else {
+                    None
+                };
+                let mut children = vec![self.analyze_expression(&if_stmt.condition), then_node];
+                if let Some(node) = else_node {
+                    children.push(node);
+                }
+                AnnotatedNode {
+                    node_type: "IfStatement".to_string(),
+                    children,
+                    ..Default::default()
                 }
             }
-            // Handle other statement types...
             _ => self.analyze_statement(stmt),
         }
     }
 
-    fn analyze_struct_declaration(&mut self, struct_decl: &StructDeclaration) {
+    fn analyze_struct_declaration(&mut self, struct_decl: &StructDeclaration) -> AnnotatedNode {
         let name = &struct_decl.name.name;
         let mut fields = std::collections::HashMap::new();
+        let mut field_nodes = vec![];
+
         for field in &struct_decl.fields {
             if fields.contains_key(&field.name.name) {
                 self.errors.push(SemanticError::RedeclaredField(
@@ -288,6 +360,14 @@ impl SemanticAnalyzer {
                 ));
             }
             fields.insert(field.name.name.clone(), field.field_type.clone());
+            field_nodes.push(AnnotatedNode {
+                node_type: "FieldDeclaration".to_string(),
+                value: field.name.name.clone(),
+                inferred_type: field.field_type.to_string(),
+                start_line: field.name.line as u32,
+                start_column: field.name.column as u32,
+                ..Default::default()
+            });
         }
 
         let symbol = Symbol::Struct {
@@ -303,53 +383,55 @@ impl SemanticAnalyzer {
                 struct_decl.name.column,
             ));
         }
+
+        AnnotatedNode {
+            node_type: "StructDeclaration".to_string(),
+            value: name.clone(),
+            children: field_nodes,
+            start_line: struct_decl.name.line as u32,
+            start_column: struct_decl.name.column as u32,
+            ..Default::default()
+        }
     }
 
-    fn analyze_statement(&mut self, statement: &Statement) {
+    fn analyze_statement(&mut self, statement: &Statement) -> AnnotatedNode {
         match statement {
-            Statement::Expression(expr) => {
-                self.analyze_expression(expr);
-            }
+            Statement::Expression(expr) => self.analyze_expression(expr),
             Statement::Block(block) => {
                 self.symbol_table.enter_scope();
-                self.analyze_block(block);
+                let node = self.analyze_block(block);
                 self.symbol_table.leave_scope();
+                node
             }
             Statement::If(if_stmt) => {
-                self.analyze_expression(&if_stmt.condition);
-                self.analyze_block(&if_stmt.then_block);
-                if let Some(else_branch) = &if_stmt.else_block {
-                    match else_branch {
-                        ElseBranch::Block(block) => self.analyze_statement(block),
-                        ElseBranch::If(if_stmt) => {
-                            self.analyze_statement(&Statement::If((**if_stmt).clone()))
-                        }
+                let cond_node = self.analyze_expression(&if_stmt.condition);
+                let then_node = self.analyze_block(&if_stmt.then_block);
+                let else_node = if_stmt.else_block.as_ref().map(|branch| match branch {
+                    ElseBranch::Block(block) => self.analyze_statement(block),
+                    ElseBranch::If(if_stmt) => {
+                        self.analyze_statement(&Statement::If((**if_stmt).clone()))
                     }
+                });
+                let mut children = vec![cond_node, then_node];
+                if let Some(node) = else_node {
+                    children.push(node);
+                }
+                AnnotatedNode {
+                    node_type: "IfStatement".to_string(),
+                    children,
+                    ..Default::default()
                 }
             }
             Statement::While(while_stmt) => {
-                self.analyze_expression(&while_stmt.condition);
-                self.analyze_block(&while_stmt.body);
-            }
-            Statement::Return(return_stmt) => {
-                let (line, column) = return_stmt.value.get_line_col();
-                // Check if we're inside a function
-                if let Some((fn_name, return_type)) = &self.current_function {
-                    let return_type = return_type.clone();
-                    let expr_type = self.analyze_expression(&return_stmt.value);
-                    if expr_type != return_type {
-                        self.errors.push(SemanticError::ReturnTypeMismatch(
-                            return_type.to_string(),
-                            expr_type.to_string(),
-                            line,
-                            column,
-                        ));
-                    }
-                } else {
-                    self.errors
-                        .push(SemanticError::ReturnOutsideFunction(line, column));
+                let cond_node = self.analyze_expression(&while_stmt.condition);
+                let body_node = self.analyze_block(&while_stmt.body);
+                AnnotatedNode {
+                    node_type: "WhileStatement".to_string(),
+                    children: vec![cond_node, body_node],
+                    ..Default::default()
                 }
             }
+            Statement::Return(return_stmt) => self.analyze_return_statement(return_stmt),
             Statement::For(for_stmt) => {
                 self.symbol_table.enter_scope();
                 let var_name = &for_stmt.variable.name;
@@ -361,196 +443,205 @@ impl SemanticAnalyzer {
                     column: for_stmt.variable.column,
                 };
                 self.symbol_table.insert(var_name.clone(), symbol);
-                self.analyze_expression(&for_stmt.iterable);
-                self.analyze_block(&for_stmt.body);
+                let iterable_node = self.analyze_expression(&for_stmt.iterable);
+                let body_node = self.analyze_block(&for_stmt.body);
                 self.symbol_table.leave_scope();
+                AnnotatedNode {
+                    node_type: "ForStatement".to_string(),
+                    children: vec![
+                        self.identifier_to_annotated(&for_stmt.variable),
+                        iterable_node,
+                        body_node,
+                    ],
+                    ..Default::default()
+                }
             }
-            _ => {}
+            _ => AnnotatedNode::default(),
         }
     }
 
-    fn analyze_block(&mut self, block: &Block) {
-        for declaration in &block.statements {
-            self.analyze_declaration(declaration);
+    fn analyze_return_statement(&mut self, return_stmt: &ReturnStatement) -> AnnotatedNode {
+        let (line, column) = return_stmt.value.get_line_col();
+        let value_node = self.analyze_expression(&return_stmt.value);
+        if let Some((_fn_name, return_type)) = &self.current_function {
+            let expr_type = Type::from_str(&value_node.inferred_type).unwrap_or(Type::Void);
+            if expr_type != *return_type {
+                self.errors.push(SemanticError::ReturnTypeMismatch(
+                    return_type.to_string(),
+                    expr_type.to_string(),
+                    line,
+                    column,
+                ));
+            }
+        } else {
+            self.errors
+                .push(SemanticError::ReturnOutsideFunction(line, column));
+        }
+        AnnotatedNode {
+            node_type: "ReturnStatement".to_string(),
+            children: vec![value_node],
+            ..Default::default()
         }
     }
 
-    fn analyze_expression(&mut self, expression: &Expression) -> Type {
+    fn analyze_block(&mut self, block: &Block) -> AnnotatedNode {
+        let children = block
+            .statements
+            .iter()
+            .map(|d| self.analyze_declaration(d))
+            .collect();
+        AnnotatedNode {
+            node_type: "Block".to_string(),
+            children,
+            ..Default::default()
+        }
+    }
+
+    fn analyze_expression(&mut self, expression: &Expression) -> AnnotatedNode {
         match expression {
             Expression::Identifier(id) => {
-                if let Some(symbol) = self.symbol_table.lookup(&id.name) {
-                    match symbol {
-                        Symbol::Variable { type_, .. } => return type_.clone(),
-                        _ => return Type::Void, // Or some other appropriate type for non-variables
-                    }
+                let type_ = self.symbol_table.lookup(&id.name).map_or(Type::Void, |s| s.get_type());
+                if self.symbol_table.lookup(&id.name).is_none() {
+                    self.errors.push(SemanticError::UndeclaredVariable(
+                        id.name.clone(),
+                        id.line,
+                        id.column,
+                    ));
                 }
-                self.errors.push(SemanticError::UndeclaredVariable(
-                    id.name.clone(),
-                    id.line,
-                    id.column,
-                ));
-                Type::Void
+                let mut node = self.identifier_to_annotated(id);
+                node.inferred_type = type_.to_string();
+                node
             }
             Expression::Literal(lit) => match lit {
-                Literal::Int(_) => Type::Int,
-                Literal::Float(_) => Type::Float,
-                Literal::String(_) => Type::String,
-                Literal::Bool(_) => Type::Bool,
+                Literal::Int(v) => AnnotatedNode {
+                    node_type: "IntLiteral".to_string(),
+                    value: v.to_string(),
+                    inferred_type: "Int".to_string(),
+                    ..Default::default()
+                },
+                Literal::Float(v) => AnnotatedNode {
+                    node_type: "FloatLiteral".to_string(),
+                    value: v.to_string(),
+                    inferred_type: "Float".to_string(),
+                    ..Default::default()
+                },
+                Literal::String(v) => AnnotatedNode {
+                    node_type: "StringLiteral".to_string(),
+                    value: v.clone(),
+                    inferred_type: "String".to_string(),
+                    ..Default::default()
+                },
+                Literal::Bool(v) => AnnotatedNode {
+                    node_type: "BoolLiteral".to_string(),
+                    value: v.to_string(),
+                    inferred_type: "Bool".to_string(),
+                    ..Default::default()
+                },
             },
-            Expression::Binary { left, op: _, right } => {
-                let left_type = self.analyze_expression(left);
-                let right_type = self.analyze_expression(right);
+            Expression::Binary { left, op, right } => {
+                let left_node = self.analyze_expression(left);
+                let right_node = self.analyze_expression(right);
+                let left_type = Type::from_str(&left_node.inferred_type).unwrap_or(Type::Void);
+                let right_type = Type::from_str(&right_node.inferred_type).unwrap_or(Type::Void);
+
                 if left_type != right_type {
-                    // This is a simplification. In a real compiler, you'd have more complex type compatibility rules.
                     self.errors.push(SemanticError::TypeMismatch(
                         left_type.to_string(),
                         right_type.to_string(),
+                        0, // Add line/col info
                         0,
-                        0,
-                    )); // Add line/col info
+                    ));
                 }
-                left_type // For simplicity, returning left_type. Should be based on operator.
+
+                AnnotatedNode {
+                    node_type: "BinaryExpression".to_string(),
+                    value: format!("{:?}", op),
+                    children: vec![left_node, right_node],
+                    inferred_type: left_type.to_string(), // Simplification
+                    ..Default::default()
+                }
             }
             Expression::Assignment { target, value } => {
-                // First, get the symbol info without holding the reference
-                let symbol_info =
-                    self.symbol_table
-                        .lookup(&target.name)
-                        .map(|symbol| match symbol {
-                            Symbol::Constant { .. } => (true, symbol.get_type()),
-                            Symbol::Variable { .. } => (false, symbol.get_type()),
-                            _ => (false, Type::Void),
-                        });
+                let symbol_info = self.symbol_table.lookup(&target.name).map(|s| (s.is_constant(), s.get_type()));
+                let value_node = self.analyze_expression(value);
+                let value_type = Type::from_str(&value_node.inferred_type).unwrap_or(Type::Void);
 
-                match symbol_info {
-                    Some((is_constant, target_type)) => {
-                        if is_constant {
-                            self.errors.push(SemanticError::InvalidAssignment(
-                                format!("Cannot assign to constant '{}'", target.name),
-                                target.line,
-                                target.column,
-                            ));
-                        } else {
-                            let value_type = self.analyze_expression(value);
-                            if target_type != value_type {
-                                self.errors.push(SemanticError::TypeMismatch(
-                                    target_type.to_string(),
-                                    value_type.to_string(),
-                                    target.line,
-                                    target.column,
-                                ));
-                            }
-                        }
-                    }
-                    None => {
-                        self.errors.push(SemanticError::UndeclaredVariable(
-                            target.name.clone(),
+                if let Some((is_constant, target_type)) = symbol_info {
+                    if is_constant {
+                        self.errors.push(SemanticError::InvalidAssignment(
+                            format!("Cannot assign to constant '{}'", target.name),
+                            target.line,
+                            target.column,
+                        ));
+                    } else if target_type != value_type {
+                        self.errors.push(SemanticError::TypeMismatch(
+                            target_type.to_string(),
+                            value_type.to_string(),
                             target.line,
                             target.column,
                         ));
                     }
+                } else {
+                    self.errors.push(SemanticError::UndeclaredVariable(
+                        target.name.clone(),
+                        target.line,
+                        target.column,
+                    ));
                 }
-                Type::Void
+
+                AnnotatedNode {
+                    node_type: "Assignment".to_string(),
+                    children: vec![self.identifier_to_annotated(target), value_node],
+                    inferred_type: "Void".to_string(),
+                    ..Default::default()
+                }
             }
-            Expression::MemberAccess { object, property } => {
-                let object_type = self.analyze_expression(object);
-                // This is a simplification. You would need to get the struct definition and check the field.
-                Type::Void
-            }
-            Expression::FunctionCall {
-                function,
-                arguments,
-            } => {
+            Expression::FunctionCall { function, arguments } => {
                 let fn_identifier = match &**function {
                     Expression::Identifier(ident) => ident,
                     _ => {
-                        self.errors.push(SemanticError::InvalidFunctionCallTarget(
-                            function.get_line_col().0,
-                            function.get_line_col().1,
-                        ));
-                        return Type::Void;
+                        let (line, col) = function.get_line_col();
+                        self.errors.push(SemanticError::InvalidFunctionCallTarget(line, col));
+                        return AnnotatedNode {
+                            node_type: "Error".to_string(),
+                            value: "Invalid function call target".to_string(),
+                            ..Default::default()
+                        };
                     }
                 };
 
-                if let Some(symbol) = self.symbol_table.lookup(&fn_identifier.name) {
-                    match symbol {
-                        Symbol::Function {
-                            name: fn_name_sym,
-                            parameters: parameters_sym,
-                            return_type: return_type_sym,
-                            ..
-                        } => {
-                            let fn_name = fn_name_sym.clone();
-                            let parameters = parameters_sym.clone();
-                            let return_type = return_type_sym.clone();
+                let mut arg_nodes = vec![];
+                for arg in arguments {
+                    arg_nodes.push(self.analyze_expression(arg));
+                }
 
-                            // Check argument count
-                            if arguments.len() != parameters.len() {
-                                self.errors.push(SemanticError::ArgumentCountMismatch(
-                                    fn_name.to_string(),
-                                    parameters.len(),
-                                    arguments.len(),
-                                    fn_identifier.line,
-                                    fn_identifier.column,
-                                ));
-                                return return_type.clone();
-                            }
+                let return_type = self.symbol_table.lookup(&fn_identifier.name).map_or(Type::Void, |s| s.get_type());
 
-                            // Check argument types
-                            let param_types = parameters.clone();
-                            for (i, (arg, param_type)) in
-                                arguments.iter().zip(param_types.iter()).enumerate()
-                            {
-                                let arg_type = self.analyze_expression(arg);
-                                if arg_type != *param_type {
-                                    self.errors.push(SemanticError::ArgumentTypeMismatch(
-                                        fn_name.clone(),
-                                        i,
-                                        param_type.to_string(),
-                                        arg_type.to_string(),
-                                        fn_identifier.line,
-                                        fn_identifier.column,
-                                    ));
-                                }
-                            }
-
-                            return_type.clone()
-                        }
-                        _ => {
-                            self.errors.push(SemanticError::UndefinedFunction(
-                                fn_identifier.name.clone(),
-                                fn_identifier.line,
-                                fn_identifier.column,
-                            ));
-                            Type::Void
-                        }
-                    }
-                } else {
-                    self.errors.push(SemanticError::UndefinedFunction(
-                        fn_identifier.name.clone(),
-                        fn_identifier.line,
-                        fn_identifier.column,
-                    ));
-                    Type::Void
+                AnnotatedNode {
+                    node_type: "FunctionCall".to_string(),
+                    value: fn_identifier.name.clone(),
+                    children: arg_nodes,
+                    inferred_type: return_type.to_string(),
+                    ..Default::default()
                 }
             }
-            _ => Type::Void,
+            _ => AnnotatedNode::default(),
         }
     }
 
     fn get_type(&self, opt_type: &Option<Type>) -> Type {
         opt_type.clone().unwrap_or(Type::Void)
     }
-}
 
-impl Type {
-    pub fn to_string(&self) -> String {
-        match self {
-            Type::Int => "Int".to_string(),
-            Type::Float => "Float".to_string(),
-            Type::String => "String".to_string(),
-            Type::Bool => "Bool".to_string(),
-            Type::Void => "Void".to_string(),
+    fn identifier_to_annotated(&self, id: &Identifier) -> AnnotatedNode {
+        AnnotatedNode {
+            node_type: "Identifier".to_string(),
+            value: id.name.clone(),
+            start_line: id.line as u32,
+            start_column: id.column as u32,
+            end_line: id.line as u32,
+            end_column: (id.column + id.name.len()) as u32,
+            ..Default::default()
         }
     }
 }

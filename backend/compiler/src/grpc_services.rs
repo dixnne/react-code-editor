@@ -3,7 +3,7 @@
 use crate::ast::*;
 use crate::lexer::LexicalAnalyzer;
 use crate::parser::parse_tokens;
-use crate::semantic_analyzer::{SemanticAnalyzer, SemanticError};
+use crate::semantic_analyzer::{SemanticAnalyzer, SemanticError as AstSemanticError};
 use crate::symbol_table::{Scope, Symbol, SymbolTable};
 use crate::token::{LexerToken, TokenType};
 use tonic::{Request, Response, Status};
@@ -13,10 +13,12 @@ pub mod compiler {
 }
 
 use compiler::{
-    compiler_server::{Compiler, CompilerServer},
-    lexer_server::{Lexer, LexerServer},
-    parser_server::{Parser, ParserServer},
-    AnalyzeRequest, AstNode, CompilerRequest, CompilerResponse, ParseRequest, ParseResponse, ParseSourceRequest, ParserError, SemanticAnalysisResponse, Token, TokenList,
+    compiler_server::Compiler,
+    lexer_server::Lexer,
+    parser_server::Parser,
+    AnalyzeRequest, AnnotatedNode, AstNode, CompilerRequest, CompilerResponse, ParseRequest,
+    ParseResponse, ParseSourceRequest, ParserError, SemanticAnalysisResponse,
+    SemanticError as ProtoSemanticError, Token, TokenList, Program as ProtoProgram
 };
 
 // --- Implementación del Servicio del Lexer ---
@@ -26,14 +28,26 @@ pub struct LexerService {}
 
 #[tonic::async_trait]
 impl Lexer for LexerService {
-    async fn analyze(&self, request: Request<AnalyzeRequest>) -> std::result::Result<Response<TokenList>, Status> {
+    async fn analyze(
+        &self,
+        request: Request<AnalyzeRequest>,
+    ) -> std::result::Result<Response<TokenList>, Status> {
         let input_str = request.into_inner().input;
         let mut analyzer = LexicalAnalyzer::new(&input_str);
         let tokens = analyzer.scan_tokens();
 
         let token_list_proto = tokens
             .into_iter()
-            .filter(|t| !matches!(t.token_type, TokenType::Whitespace | TokenType::NewLine | TokenType::CommentSingle | TokenType::CommentMultiLine | TokenType::Unknown))
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
             .map(|t| Token {
                 token_type: t.token_type.to_string(),
                 lexeme: t.lexeme,
@@ -42,7 +56,9 @@ impl Lexer for LexerService {
             })
             .collect::<Vec<_>>();
 
-        Ok(Response::new(TokenList { tokens: token_list_proto }))
+        Ok(Response::new(TokenList {
+            tokens: token_list_proto,
+        }))
     }
 }
 
@@ -53,7 +69,10 @@ pub struct ParserService;
 
 #[tonic::async_trait]
 impl Parser for ParserService {
-    async fn parse(&self, request: Request<ParseRequest>) -> Result<Response<ParseResponse>, Status> {
+    async fn parse(
+        &self,
+        request: Request<ParseRequest>,
+    ) -> Result<Response<ParseResponse>, Status> {
         let proto_tokens = request.into_inner().tokens;
         let tokens: Vec<LexerToken> = proto_tokens
             .into_iter()
@@ -72,11 +91,26 @@ impl Parser for ParserService {
         }))
     }
 
-    async fn parse_source(&self, request: Request<ParseSourceRequest>) -> Result<Response<ParseResponse>, Status> {
+    async fn parse_source(
+        &self,
+        request: Request<ParseSourceRequest>,
+    ) -> Result<Response<ParseResponse>, Status> {
         let source_code = request.into_inner().source;
         let mut lexer = LexicalAnalyzer::new(&source_code);
         let tokens = lexer.scan_tokens();
-        let filtered_tokens: Vec<LexerToken> = tokens.into_iter().filter(|t| !matches!(t.token_type, TokenType::Whitespace | TokenType::NewLine | TokenType::CommentSingle | TokenType::CommentMultiLine | TokenType::Unknown)).collect();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
         let ParseResult { ast, errors } = parse_tokens(&filtered_tokens);
         Ok(Response::new(ParseResponse {
             ast: Some(program_to_proto(&ast)),
@@ -92,16 +126,34 @@ pub struct CompilerService;
 
 #[tonic::async_trait]
 impl Compiler for CompilerService {
-    async fn compile(&self, request: Request<CompilerRequest>) -> Result<Response<CompilerResponse>, Status> {
+    async fn compile(
+        &self,
+        request: Request<CompilerRequest>,
+    ) -> Result<Response<CompilerResponse>, Status> {
         let source_code = request.into_inner().source;
 
         // 1. Lexer
         let mut lexer = LexicalAnalyzer::new(&source_code);
         let tokens = lexer.scan_tokens();
-        let filtered_tokens: Vec<LexerToken> = tokens.into_iter().filter(|t| !matches!(t.token_type, TokenType::Whitespace | TokenType::NewLine | TokenType::CommentSingle | TokenType::CommentMultiLine | TokenType::Unknown)).collect();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
 
         // 2. Parser
-        let ParseResult { ast, errors: parse_errors } = parse_tokens(&filtered_tokens);
+        let ParseResult {
+            ast,
+            errors: parse_errors,
+        } = parse_tokens(&filtered_tokens);
         let parse_response = ParseResponse {
             ast: Some(program_to_proto(&ast)),
             errors: errors_to_proto(&parse_errors),
@@ -109,16 +161,53 @@ impl Compiler for CompilerService {
 
         // 3. Semantic Analyzer
         let mut semantic_analyzer = SemanticAnalyzer::new();
-        semantic_analyzer.analyze(&ast);
+        let annotated_ast = semantic_analyzer.analyze(&ast); // Ahora analyze devuelve el AST anotado
+
         let semantic_response = SemanticAnalysisResponse {
             errors: semantic_errors_to_proto(&semantic_analyzer.errors),
             symbol_table: Some(symbol_table_to_proto(&semantic_analyzer.symbol_table)),
+            annotated_ast: Some(annotated_ast),
         };
 
         Ok(Response::new(CompilerResponse {
             parse_response: Some(parse_response),
             semantic_response: Some(semantic_response),
         }))
+    }
+
+    async fn get_ast(
+        &self,
+        _request: Request<CompilerRequest>,
+    ) -> Result<Response<ProtoProgram>, Status> {
+        Err(Status::unimplemented("get_ast no está implementado"))
+    }
+
+    async fn get_annotated_ast(
+        &self,
+        request: Request<CompilerRequest>,
+    ) -> Result<Response<AnnotatedNode>, Status> {
+        let source_code = request.into_inner().source;
+        let mut lexer = LexicalAnalyzer::new(&source_code);
+        let tokens = lexer.scan_tokens();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
+
+        let ParseResult { ast, .. } = parse_tokens(&filtered_tokens);
+        let mut semantic_analyzer = SemanticAnalyzer::new();
+        let annotated_ast = semantic_analyzer.analyze(&ast);
+
+        Ok(Response::new(annotated_ast))
     }
 }
 
@@ -128,7 +217,11 @@ fn program_to_proto(program: &Program) -> AstNode {
     AstNode {
         node_type: "Program".to_string(),
         value: "".to_string(),
-        children: program.declarations.iter().map(declaration_to_proto).collect(),
+        children: program
+            .declarations
+            .iter()
+            .map(declaration_to_proto)
+            .collect(),
         ..Default::default()
     }
 }
@@ -163,7 +256,10 @@ fn expression_to_proto(expr: &Expression) -> AstNode {
         Expression::Unary { op, expr } => unary_expr_to_proto(op, expr),
         Expression::Assignment { target, value } => assignment_to_proto(target, value),
         Expression::Grouped(expr) => grouped_expr_to_proto(expr),
-        Expression::FunctionCall { function, arguments } => func_call_to_proto(function, arguments),
+        Expression::FunctionCall {
+            function,
+            arguments,
+        } => func_call_to_proto(function, arguments),
         Expression::Array(elements) => array_to_proto(elements),
         Expression::Object(fields) => object_to_proto(fields),
         Expression::Splat(expr) => splat_to_proto(expr),
@@ -176,7 +272,10 @@ fn member_access_to_proto(object: &Expression, property: &Identifier) -> AstNode
     AstNode {
         node_type: "MemberAccess".to_string(),
         value: ".".to_string(),
-        children: vec![expression_to_proto(object), identifier_to_proto(property)],
+        children: vec![
+            expression_to_proto(object),
+            identifier_to_proto(property),
+        ],
         ..Default::default()
     }
 }
@@ -204,7 +303,11 @@ fn function_to_proto(func: &Function) -> AstNode {
     AstNode {
         node_type: "Function".to_string(),
         value: func.name.name.clone(),
-        children: vec![params_node, type_to_proto(&func.return_type), block_to_proto(&func.body)],
+        children: vec![
+            params_node,
+            type_to_proto(&func.return_type),
+            block_to_proto(&func.body),
+        ],
         start_line: func.name.line as u32,
         start_column: func.name.column as u32,
         ..Default::default()
@@ -278,7 +381,10 @@ fn return_stmt_to_proto(ret: &ReturnStatement) -> AstNode {
 }
 
 fn if_stmt_to_proto(if_stmt: &IfStatement) -> AstNode {
-    let mut children = vec![expression_to_proto(&if_stmt.condition), block_to_proto(&if_stmt.then_block)];
+    let mut children = vec![
+        expression_to_proto(&if_stmt.condition),
+        block_to_proto(&if_stmt.then_block),
+    ];
     if let Some(else_branch) = &if_stmt.else_block {
         let else_node = match else_branch {
             ElseBranch::If(nested_if) => if_stmt_to_proto(nested_if),
@@ -300,7 +406,10 @@ fn if_stmt_to_proto(if_stmt: &IfStatement) -> AstNode {
 fn while_stmt_to_proto(while_stmt: &WhileStatement) -> AstNode {
     AstNode {
         node_type: "While".to_string(),
-        children: vec![expression_to_proto(&while_stmt.condition), block_to_proto(&while_stmt.body)],
+        children: vec![
+            expression_to_proto(&while_stmt.condition),
+            block_to_proto(&while_stmt.body),
+        ],
         ..Default::default()
     }
 }
@@ -308,7 +417,10 @@ fn while_stmt_to_proto(while_stmt: &WhileStatement) -> AstNode {
 fn do_until_stmt_to_proto(do_until_stmt: &DoUntilStatement) -> AstNode {
     AstNode {
         node_type: "DoUntil".to_string(),
-        children: vec![block_to_proto(&do_until_stmt.body), expression_to_proto(&do_until_stmt.condition)],
+        children: vec![
+            block_to_proto(&do_until_stmt.body),
+            expression_to_proto(&do_until_stmt.condition),
+        ],
         ..Default::default()
     }
 }
@@ -316,7 +428,11 @@ fn do_until_stmt_to_proto(do_until_stmt: &DoUntilStatement) -> AstNode {
 fn for_stmt_to_proto(for_stmt: &ForStatement) -> AstNode {
     AstNode {
         node_type: "For".to_string(),
-        children: vec![identifier_to_proto(&for_stmt.variable), expression_to_proto(&for_stmt.iterable), block_to_proto(&for_stmt.body)],
+        children: vec![
+            identifier_to_proto(&for_stmt.variable),
+            expression_to_proto(&for_stmt.iterable),
+            block_to_proto(&for_stmt.body),
+        ],
         start_line: for_stmt.variable.line as u32,
         start_column: for_stmt.variable.column as u32,
         ..Default::default()
@@ -404,7 +520,10 @@ fn grouped_expr_to_proto(expr: &Expression) -> AstNode {
 fn func_call_to_proto(function: &Expression, arguments: &[Expression]) -> AstNode {
     AstNode {
         node_type: "FunctionCall".to_string(),
-        children: vec![expression_to_proto(function)].into_iter().chain(arguments.iter().map(expression_to_proto)).collect(),
+        children: vec![expression_to_proto(function)]
+            .into_iter()
+            .chain(arguments.iter().map(expression_to_proto))
+            .collect(),
         ..Default::default()
     }
 }
@@ -474,7 +593,9 @@ fn errors_to_proto(errors: &[SyntaxError]) -> Vec<ParserError> {
         .iter()
         .map(|e| {
             let (error_type, message, line, column) = match e {
-                SyntaxError::UnexpectedToken(msg, l, c) => ("UnexpectedToken", msg.clone(), *l, *c),
+                SyntaxError::UnexpectedToken(msg, l, c) => {
+                    ("UnexpectedToken", msg.clone(), *l, *c)
+                }
                 _ => ("GenericError", format!("{}", e), 0, 0),
             };
             ParserError {
@@ -487,71 +608,97 @@ fn errors_to_proto(errors: &[SyntaxError]) -> Vec<ParserError> {
         .collect()
 }
 
-fn semantic_errors_to_proto(errors: &[SemanticError]) -> Vec<compiler::SemanticError> {
+fn semantic_errors_to_proto(errors: &[AstSemanticError]) -> Vec<ProtoSemanticError> {
     errors
         .iter()
         .map(|e| match e {
-            SemanticError::UndeclaredVariable(name, line, column) => compiler::SemanticError {
+            AstSemanticError::UndeclaredVariable(name, line, column) => ProtoSemanticError {
                 message: format!("Undeclared variable: {}", name),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::RedeclaredVariable(name, line, column) => compiler::SemanticError {
+            AstSemanticError::RedeclaredVariable(name, line, column) => ProtoSemanticError {
                 message: format!("Redeclared variable: {}", name),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::TypeMismatch(expected, found, line, column) => compiler::SemanticError {
+            AstSemanticError::TypeMismatch(expected, found, line, column) => ProtoSemanticError {
                 message: format!("Type mismatch: expected {}, found {}", expected, found),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::InvalidAssignment(name, line, column) => compiler::SemanticError {
+            AstSemanticError::InvalidAssignment(name, line, column) => ProtoSemanticError {
                 message: format!("Invalid assignment to constant: {}", name),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::UndefinedStruct(name, line, column) => compiler::SemanticError {
+            AstSemanticError::UndefinedStruct(name, line, column) => ProtoSemanticError {
                 message: format!("Undefined struct: {}", name),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::RedeclaredStruct(name, line, column) => compiler::SemanticError {
+            AstSemanticError::RedeclaredStruct(name, line, column) => ProtoSemanticError {
                 message: format!("Redeclared struct: {}", name),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::RedeclaredField(struct_name, field_name, line, column) => compiler::SemanticError {
-                message: format!("Redeclared field '{}' in struct '{}'", field_name, struct_name),
-                line: *line as u32,
-                column: *column as u32,
-            },
-            SemanticError::FieldNotFound(struct_name, field_name, line, column) => compiler::SemanticError {
-                message: format!("Field '{}' not found in struct '{}'", field_name, struct_name),
-                line: *line as u32,
-                column: *column as u32,
-            },
-            SemanticError::InvalidMemberAccess(name, line, column) => compiler::SemanticError {
+            AstSemanticError::RedeclaredField(struct_name, field_name, line, column) => {
+                ProtoSemanticError {
+                    message: format!(
+                        "Redeclared field '{}' in struct '{}'",
+                        field_name, struct_name
+                    ),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::FieldNotFound(struct_name, field_name, line, column) => {
+                ProtoSemanticError {
+                    message: format!(
+                        "Field '{}' not found in struct '{}'",
+                        field_name, struct_name
+                    ),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::InvalidMemberAccess(name, line, column) => ProtoSemanticError {
                 message: format!("Invalid member access: {}", name),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::InvalidFunctionCallTarget(line, column) => compiler::SemanticError {
+            AstSemanticError::InvalidFunctionCallTarget(line, column) => ProtoSemanticError {
                 message: "Invalid function call target".to_string(),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::UndefinedFunction(name, line, column) => compiler::SemanticError {
+            AstSemanticError::UndefinedFunction(name, line, column) => ProtoSemanticError {
                 message: format!("Undefined function: {}", name),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::ArgumentCountMismatch(func_name, expected, found, line, column) => compiler::SemanticError {
-                message: format!("Argument count mismatch in function '{}': expected {}, found {}", func_name, expected, found),
+            AstSemanticError::ArgumentCountMismatch(
+                func_name,
+                expected,
+                found,
+                line,
+                column,
+            ) => ProtoSemanticError {
+                message: format!(
+                    "Argument count mismatch in function '{}': expected {}, found {}",
+                    func_name, expected, found
+                ),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::ArgumentTypeMismatch(func_name, arg_index, expected, found, line, column) => compiler::SemanticError {
+            AstSemanticError::ArgumentTypeMismatch(
+                func_name,
+                arg_index,
+                expected,
+                found,
+                line,
+                column,
+            ) => ProtoSemanticError {
                 message: format!(
                     "Argument type mismatch in function '{}' at argument {}: expected {}, found {}",
                     func_name, arg_index, expected, found
@@ -559,35 +706,40 @@ fn semantic_errors_to_proto(errors: &[SemanticError]) -> Vec<compiler::SemanticE
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::ReturnOutsideFunction(line, column) => compiler::SemanticError {
+            AstSemanticError::ReturnOutsideFunction(line, column) => ProtoSemanticError {
                 message: "Return statement outside function".to_string(),
                 line: *line as u32,
                 column: *column as u32,
             },
-            SemanticError::ReturnTypeMismatch(expected, found, line, column) => compiler::SemanticError {
-                message: format!("Return type mismatch: expected {}, found {}", expected, found),
-                line: *line as u32,
-                column: *column as u32,
-            },
-            SemanticError::MissingReturnStatement(func_name, line, column) => compiler::SemanticError {
-                message: format!("Missing return statement in function '{}'", func_name),
-                line: *line as u32,
-                column: *column as u32,
-            },
-            SemanticError::MissingMainFunction => compiler::SemanticError {
+            AstSemanticError::ReturnTypeMismatch(expected, found, line, column) => {
+                ProtoSemanticError {
+                    message: format!("Return type mismatch: expected {}, found {}", expected, found),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::MissingReturnStatement(func_name, line, column) => {
+                ProtoSemanticError {
+                    message: format!("Missing return statement in function '{}'", func_name),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::MissingMainFunction => ProtoSemanticError {
                 message: "Missing 'main' function".to_string(),
                 line: 0,
                 column: 0,
             },
-            SemanticError::InvalidMainFunctionSignature(reason, line, column) => compiler::SemanticError {
-                message: format!("Invalid 'main' function signature: {}", reason),
-                line: *line as u32,
-                column: *column as u32,
-            },
+            AstSemanticError::InvalidMainFunctionSignature(reason, line, column) => {
+                ProtoSemanticError {
+                    message: format!("Invalid 'main' function signature: {}", reason),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
         })
         .collect()
 }
-
 
 fn symbol_table_to_proto(table: &SymbolTable) -> compiler::SymbolTable {
     compiler::SymbolTable {
@@ -604,28 +756,51 @@ fn scope_to_proto(scope: &Scope) -> compiler::Scope {
 
 fn symbol_to_proto(symbol: &Symbol) -> compiler::Symbol {
     match symbol {
-        Symbol::Variable { name, type_, line, column, .. } => compiler::Symbol {
+        Symbol::Variable {
+            name,
+            type_,
+            line,
+            column,
+            ..
+        } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Variable".to_string(),
             data_type: type_.to_string(),
             line: *line as u32,
             column: *column as u32,
         },
-        Symbol::Function { name, return_type, line, column, .. } => compiler::Symbol {
+        Symbol::Function {
+            name,
+            return_type,
+            line,
+            column,
+            ..
+        } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Function".to_string(),
             data_type: return_type.to_string(),
             line: *line as u32,
             column: *column as u32,
         },
-        Symbol::Struct { name, line, column, .. } => compiler::Symbol {
+        Symbol::Struct {
+            name,
+            line,
+            column,
+            ..
+        } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Struct".to_string(),
             data_type: "".to_string(),
             line: *line as u32,
             column: *column as u32,
         },
-        Symbol::Constant { name, type_, line, column, .. } => compiler::Symbol {
+        Symbol::Constant {
+            name,
+            type_,
+            line,
+            column,
+            ..
+        } => compiler::Symbol {
             name: name.clone(),
             symbol_type: "Constant".to_string(),
             data_type: type_.to_string(),

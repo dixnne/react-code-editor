@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::ast::{Type, Declaration};
+use crate::ast::{Type};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Symbol {
@@ -39,6 +39,10 @@ impl Symbol {
             Symbol::Struct { .. } => Type::Void, // Structs don't have a single type
             Symbol::Constant { type_, .. } => type_.clone(), // Handle Constant type
         }
+    }
+
+    pub fn is_constant(&self) -> bool {
+        matches!(self, Symbol::Constant { .. })
     }
 }
 
