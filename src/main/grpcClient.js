@@ -5,6 +5,7 @@ import { join } from 'path'; // Es mejor usar join para rutas
 // Definir rutas para AMBOS archivos proto
 const LEXER_PROTO_PATH = join(__dirname, '../../protos/lexer.proto');
 const PARSER_PROTO_PATH = join(__dirname, '../../protos/parser.proto');
+const SEMANTIC_PROTO_PATH = join(__dirname, '../../protos/semantic.proto');
 
 // Opciones de carga del proto
 const protoOptions = {
@@ -18,7 +19,7 @@ const protoOptions = {
 
 // Cargar AMBAS definiciones de proto
 const packageDefinition = protoLoader.loadSync(
-  [LEXER_PROTO_PATH, PARSER_PROTO_PATH],
+  [LEXER_PROTO_PATH, PARSER_PROTO_PATH, SEMANTIC_PROTO_PATH],
   protoOptions
 );
 

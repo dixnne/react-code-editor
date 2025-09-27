@@ -6,57 +6,49 @@ import icon from '../../resources/icon.png?asset';
 import protoLoader from '@grpc/proto-loader';
 import grpc from '@grpc/grpc-js';
 
-// --- INICIO DE LA SECCIÓN CORREGIDA ---
+// --- UNIFIED PROTOBUF AND GRPC CLIENT SETUP ---
 
-// Define paths for both proto files
-const LEXER_PROTO_PATH = join(__dirname, '../../protos/lexer.proto');
-const PARSER_PROTO_PATH = join(__dirname, '../../protos/parser.proto');
+// Define the directory where your .proto files are located
+const PROTO_DIR = join(__dirname, '../../protos');
 
-// Opciones de carga del proto
+// Define loading options
 const protoOptions = {
   keepCase: true,
   longs: String,
   enums: String,
   defaults: true,
   oneofs: true,
-  includeDirs: [join(__dirname, '../../protos')] // Directorio para buscar `import`
+  includeDirs: [PROTO_DIR] // This is crucial for resolving imports within .proto files
 };
 
-// Carga AMBAS definiciones de proto en un solo paso
+// Load all proto definitions into a single package
 const packageDefinition = protoLoader.loadSync(
-  [LEXER_PROTO_PATH, PARSER_PROTO_PATH],
+  [
+    join(PROTO_DIR, 'lexer.proto'),
+    join(PROTO_DIR, 'parser.proto'),
+    join(PROTO_DIR, 'semantic.proto')
+  ],
   protoOptions
 );
 
+// Load the package into gRPC
+const grpcObject = grpc.loadPackageDefinition(packageDefinition);
+const compilerProto = grpcObject.compiler;
 
-// --- LÍNEAS DE DEPURACIÓN MEJORADAS ---
-// 1. Cargar el objeto gRPC
-const loadedGrpcObject = grpc.loadPackageDefinition(packageDefinition);
-// 2. Imprimir los nombres de los paquetes que gRPC encontró
-console.log("Paquetes cargados por gRPC:", Object.keys(loadedGrpcObject));
-
-
-// 3. Acceder al paquete 'compiler'
-const compilerProto = loadedGrpcObject.compiler;
-
-// 4. Añadir una verificación explícita para dar un error claro
+// Explicitly check if the compiler package was loaded correctly
 if (!compilerProto) {
-    console.error("ERROR FATAL: El paquete 'compiler' no se encontró en los archivos .proto cargados.");
-    console.error("Esto suele ocurrir por un problema de caché o de configuración.");
-    console.error("Asegúrese de que ambos archivos .proto comienzan con 'package compiler;' y que ha limpiado los directorios 'out' y 'target'.");
-    console.error("Paquetes que sí se encontraron:", Object.keys(loadedGrpcObject));
-    app.quit(); // Salir de la aplicación si no se puede cargar el proto
+  console.error("FATAL ERROR: The 'compiler' package was not found in the loaded .proto files.");
+  console.error("Please ensure your .proto files start with 'package compiler;'");
+  app.quit();
 }
 
+// Create a SINGLE client for the main Compiler service
+// This is more efficient than creating clients for each sub-service.
+const clientCompiler = new compilerProto.Compiler('localhost:50051', grpc.credentials.createInsecure());
+console.log("✅ gRPC Compiler service client created and ready.");
 
-// Crea los clientes desde el paquete 'compiler' unificado
-const clientLexer = new compilerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
-const clientParser = new compilerProto.Parser('localhost:50051', grpc.credentials.createInsecure());
 
-console.log("Servicios gRPC cargados desde el paquete 'compiler' y listos.");
-
-// --- FIN DE LA SECCIÓN CORREGIDA ---
-
+// --- ELECTRON WINDOW CREATION ---
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -70,7 +62,7 @@ function createWindow() {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      enableRemoteModule: false,
+      enableRemoteModule: false
     }
   });
 
@@ -90,14 +82,14 @@ function createWindow() {
   }
 }
 
+// --- ELECTRON APP LIFECYCLE ---
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron');
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
-
-  ipcMain.on('ping', () => console.log('pong'));
 
   createWindow();
 
@@ -112,12 +104,32 @@ app.on('window-all-closed', () => {
   }
 });
 
-// --- Manejadores de IPC (sin cambios) ---
+// --- IPC HANDLERS ---
 
+// A single handler for the entire compilation process
+ipcMain.handle('run-compiler', async (_event, sourceCode) => {
+  console.log("🚀 Received source code for compilation...");
+  return new Promise((resolve, reject) => {
+    // Call the 'Compile' RPC from your Compiler service
+    clientCompiler.Compile({ source: sourceCode }, (err, response) => {
+      if (err) {
+        console.error("❌ gRPC Compiler Error:", err);
+        reject(err.message);
+      } else {
+        console.log("✅ gRPC Compiler Response Received:", response);
+        // The response contains everything: parse results, errors, and semantic analysis results.
+        resolve(response);
+      }
+    });
+  });
+});
+
+
+// File I/O Handlers
 ipcMain.handle("open-file", async () => {
   const { filePaths, canceled } = await dialog.showOpenDialog({
     title: "Select a File",
-    buttonLabel: "Open",  
+    buttonLabel: "Open",
     properties: ["openFile"],
     filters: [{ name: "All Files", extensions: ["*"] }]
   });
@@ -163,50 +175,15 @@ ipcMain.handle("write-file", async () => {
 
 ipcMain.handle("save-file-as", async (event, data) => {
   const { filePath } = await dialog.showSaveDialog({
-      title: "Save File",
-      defaultPath: "untitled.c",
-      filters: [{ name: "C Files", extensions: ["c"] }, { name: "All Files", extensions: ["*"] }]
+    title: "Save File",
+    defaultPath: "untitled.c",
+    filters: [{ name: "C Files", extensions: ["c"] }, { name: "All Files", extensions: ["*"] }]
   });
 
   if (filePath) {
-      fs.writeFileSync(filePath, data.content, "utf-8");
-      return { path: filePath };
+    fs.writeFileSync(filePath, data.content, "utf-8");
+    return { path: filePath };
   }
 
   return null;
-});
-
-ipcMain.handle('run-lexer', async (_event, code) => {
-  console.log("Received code for lexing:", code);
-  return new Promise((resolve, reject) => {
-    clientLexer.Analyze({ input: code }, (err, response) => {
-      if (err) {
-        console.error("gRPC Lexer Error:", err);
-        reject(err.message);
-      } else {
-        console.log("gRPC Lexer Response:", response);
-        resolve(response);
-      }
-    });
-  });
-});
-
-ipcMain.handle('run-parser', async (_event, code) => {
-  console.log("Received code for parsing:", code);
-  return new Promise((resolve, reject) => {
-    clientParser.ParseSource({ source: code }, (err, response) => {
-      if (err) {
-        console.error("gRPC Parser Error:", err);
-        console.error("Error details:", {
-          code: err.code,
-          message: err.message,
-          details: err.details
-        });
-        reject(err.message);
-      } else {
-        console.log("gRPC Parser Response:", response);
-        resolve(response);
-      }
-    });
-  });
 });

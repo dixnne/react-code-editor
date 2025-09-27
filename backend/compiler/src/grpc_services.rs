@@ -1,8 +1,11 @@
 // Este archivo ahora sirve como el punto central para tus servicios gRPC.
 
+use crate::ast;
 use crate::ast::*;
 use crate::lexer::LexicalAnalyzer;
 use crate::parser::parse_tokens;
+use crate::semantic_analyzer::{SemanticAnalyzer, SemanticError as AstSemanticError};
+use crate::symbol_table::{Scope, Symbol, SymbolTable};
 use crate::token::{LexerToken, TokenType};
 use tonic::{Request, Response, Status};
 
@@ -11,10 +14,12 @@ pub mod compiler {
 }
 
 use compiler::{
-    lexer_server::{Lexer, LexerServer},
-    parser_server::{Parser, ParserServer},
-    AnalyzeRequest, AstNode, ParseRequest, ParseResponse, ParserError, Token, TokenList,
-    ParseSourceRequest,
+    compiler_server::Compiler,
+    lexer_server::Lexer,
+    parser_server::Parser,
+    AnalyzeRequest, AnnotatedNode, AstNode, CompilerRequest, CompilerResponse, ParseRequest,
+    ParseResponse, ParseSourceRequest, ParserError, SemanticAnalysisResponse,
+    SemanticError as ProtoSemanticError, Token, TokenList, Program as ProtoProgram
 };
 
 // --- Implementación del Servicio del Lexer ---
@@ -34,7 +39,16 @@ impl Lexer for LexerService {
 
         let token_list_proto = tokens
             .into_iter()
-            .filter(|t| !matches!(t.token_type, TokenType::Whitespace | TokenType::NewLine | TokenType::CommentSingle | TokenType::CommentMultiLine | TokenType::Unknown))
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
             .map(|t| Token {
                 token_type: t.token_type.to_string(),
                 lexeme: t.lexeme,
@@ -43,7 +57,9 @@ impl Lexer for LexerService {
             })
             .collect::<Vec<_>>();
 
-        Ok(Response::new(TokenList { tokens: token_list_proto }))
+        Ok(Response::new(TokenList {
+            tokens: token_list_proto,
+        }))
     }
 }
 
@@ -54,13 +70,18 @@ pub struct ParserService;
 
 #[tonic::async_trait]
 impl Parser for ParserService {
-    async fn parse(&self, request: Request<ParseRequest>) -> Result<Response<ParseResponse>, Status> {
+    async fn parse(
+        &self,
+        request: Request<ParseRequest>,
+    ) -> Result<Response<ParseResponse>, Status> {
         let proto_tokens = request.into_inner().tokens;
         let tokens: Vec<LexerToken> = proto_tokens
             .into_iter()
             .map(|t| LexerToken {
                 token_type: TokenType::from_str(&t.token_type).unwrap_or(TokenType::Unknown),
-                lexeme: t.lexeme, line: t.line as usize, column: t.column as usize,
+                lexeme: t.lexeme,
+                line: t.line as usize,
+                column: t.column as usize,
             })
             .collect();
 
@@ -70,12 +91,27 @@ impl Parser for ParserService {
             errors: errors_to_proto(&errors),
         }))
     }
-    
-    async fn parse_source(&self, request: Request<ParseSourceRequest>) -> Result<Response<ParseResponse>, Status> {
+
+    async fn parse_source(
+        &self,
+        request: Request<ParseSourceRequest>,
+    ) -> Result<Response<ParseResponse>, Status> {
         let source_code = request.into_inner().source;
         let mut lexer = LexicalAnalyzer::new(&source_code);
         let tokens = lexer.scan_tokens();
-        let filtered_tokens: Vec<LexerToken> = tokens.into_iter().filter(|t| !matches!(t.token_type, TokenType::Whitespace | TokenType::NewLine | TokenType::CommentSingle | TokenType::CommentMultiLine | TokenType::Unknown)).collect();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
         let ParseResult { ast, errors } = parse_tokens(&filtered_tokens);
         Ok(Response::new(ParseResponse {
             ast: Some(program_to_proto(&ast)),
@@ -84,12 +120,109 @@ impl Parser for ParserService {
     }
 }
 
+// --- Implementación del Servicio del Compilador ---
+
+#[derive(Debug, Default)]
+pub struct CompilerService;
+
+#[tonic::async_trait]
+impl Compiler for CompilerService {
+    async fn compile(
+        &self,
+        request: Request<CompilerRequest>,
+    ) -> Result<Response<CompilerResponse>, Status> {
+        let source_code = request.into_inner().source;
+
+        // 1. Lexer
+        let mut lexer = LexicalAnalyzer::new(&source_code);
+        let tokens = lexer.scan_tokens();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
+
+        // 2. Parser
+        let ParseResult {
+            ast,
+            errors: parse_errors,
+        } = parse_tokens(&filtered_tokens);
+        let parse_response = ParseResponse {
+            ast: Some(program_to_proto(&ast)),
+            errors: errors_to_proto(&parse_errors),
+        };
+
+        // 3. Semantic Analyzer
+        let mut semantic_analyzer = SemanticAnalyzer::new();
+        let annotated_ast = semantic_analyzer.analyze(&ast); // Ahora analyze devuelve el AST anotado
+
+        let semantic_response = SemanticAnalysisResponse {
+            errors: semantic_errors_to_proto(&semantic_analyzer.errors),
+            symbol_table: Some(symbol_table_to_proto(&semantic_analyzer.symbol_table)),
+            annotated_ast: Some(annotated_ast),
+        };
+
+        Ok(Response::new(CompilerResponse {
+            parse_response: Some(parse_response),
+            semantic_response: Some(semantic_response),
+        }))
+    }
+
+    async fn get_ast(
+        &self,
+        _request: Request<CompilerRequest>,
+    ) -> Result<Response<ProtoProgram>, Status> {
+        Err(Status::unimplemented("get_ast no está implementado"))
+    }
+
+    async fn get_annotated_ast(
+        &self,
+        request: Request<CompilerRequest>,
+    ) -> Result<Response<AnnotatedNode>, Status> {
+        let source_code = request.into_inner().source;
+        let mut lexer = LexicalAnalyzer::new(&source_code);
+        let tokens = lexer.scan_tokens();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
+
+        let ParseResult { ast, .. } = parse_tokens(&filtered_tokens);
+        let mut semantic_analyzer = SemanticAnalyzer::new();
+        let annotated_ast = semantic_analyzer.analyze(&ast);
+
+        Ok(Response::new(annotated_ast))
+    }
+}
+
 // --- Funciones de Conversión de AST a Protobuf ---
 
 fn program_to_proto(program: &Program) -> AstNode {
     AstNode {
-        node_type: "Program".to_string(), value: "".to_string(),
-        children: program.declarations.iter().map(declaration_to_proto).collect(),
+        node_type: "Program".to_string(),
+        value: "".to_string(),
+        children: program
+            .declarations
+            .iter()
+            .map(declaration_to_proto)
+            .collect(),
         ..Default::default()
     }
 }
@@ -117,14 +250,17 @@ fn statement_to_proto(stmt: &Statement) -> AstNode {
 }
 
 fn expression_to_proto(expr: &Expression) -> AstNode {
-     match expr {
+    match expr {
         Expression::Identifier(id) => identifier_to_proto(id),
         Expression::Literal(lit) => literal_to_proto(lit),
         Expression::Binary { left, op, right } => binary_expr_to_proto(left, op, right),
         Expression::Unary { op, expr } => unary_expr_to_proto(op, expr),
         Expression::Assignment { target, value } => assignment_to_proto(target, value),
         Expression::Grouped(expr) => grouped_expr_to_proto(expr),
-        Expression::FunctionCall { function, arguments } => func_call_to_proto(function, arguments),
+        Expression::FunctionCall {
+            function,
+            arguments,
+        } => func_call_to_proto(function, arguments),
         Expression::Array(elements) => array_to_proto(elements),
         Expression::Object(fields) => object_to_proto(fields),
         Expression::Splat(expr) => splat_to_proto(expr),
@@ -145,17 +281,24 @@ fn member_access_to_proto(object: &Expression, property: &Identifier) -> AstNode
     }
 }
 
-
 // --- Implementaciones Detalladas ---
 
 fn function_to_proto(func: &Function) -> AstNode {
     let params_node = AstNode {
         node_type: "Parameters".to_string(),
-        children: func.parameters.iter().map(|p| {
-            let mut param_children = vec![identifier_to_proto(&p.name)];
-            param_children.push(type_to_proto(&p.param_type));
-            AstNode { node_type: "Parameter".to_string(), children: param_children, ..Default::default() }
-        }).collect(),
+        children: func
+            .parameters
+            .iter()
+            .map(|p| {
+                let mut param_children = vec![identifier_to_proto(&p.name)];
+                param_children.push(type_to_proto(&p.param_type));
+                AstNode {
+                    node_type: "Parameter".to_string(),
+                    children: param_children,
+                    ..Default::default()
+                }
+            })
+            .collect(),
         ..Default::default()
     };
     AstNode {
@@ -173,14 +316,12 @@ fn function_to_proto(func: &Function) -> AstNode {
 }
 
 fn variable_decl_to_proto(decl: &VariableDeclaration) -> AstNode {
-    let mut children = vec![
-        identifier_to_proto(&decl.identifier),
-    ];
+    let mut children = vec![identifier_to_proto(&decl.identifier)];
     if let Some(t) = &decl.var_type {
         children.push(type_to_proto(t));
     }
     children.push(expression_to_proto(&decl.value));
-    
+
     AstNode {
         node_type: "VariableDeclaration".to_string(),
         value: "let".to_string(),
@@ -192,9 +333,7 @@ fn variable_decl_to_proto(decl: &VariableDeclaration) -> AstNode {
 }
 
 fn constant_decl_to_proto(decl: &ConstantDeclaration) -> AstNode {
-    let mut children = vec![
-        identifier_to_proto(&decl.identifier),
-    ];
+    let mut children = vec![identifier_to_proto(&decl.identifier)];
     if let Some(t) = &decl.const_type {
         children.push(type_to_proto(t));
     }
@@ -213,13 +352,15 @@ fn constant_decl_to_proto(decl: &ConstantDeclaration) -> AstNode {
 fn struct_decl_to_proto(decl: &StructDeclaration) -> AstNode {
     let fields_node = AstNode {
         node_type: "Fields".to_string(),
-        children: decl.fields.iter().map(|f| {
-            AstNode {
+        children: decl
+            .fields
+            .iter()
+            .map(|f| AstNode {
                 node_type: "Field".to_string(),
                 children: vec![identifier_to_proto(&f.name), type_to_proto(&f.field_type)],
                 ..Default::default()
-            }
-        }).collect(),
+            })
+            .collect(),
         ..Default::default()
     };
     AstNode {
@@ -250,15 +391,26 @@ fn if_stmt_to_proto(if_stmt: &IfStatement) -> AstNode {
             ElseBranch::If(nested_if) => if_stmt_to_proto(nested_if),
             ElseBranch::Block(block) => statement_to_proto(block),
         };
-        children.push(AstNode { node_type: "Else".to_string(), children: vec![else_node], ..Default::default() });
+        children.push(AstNode {
+            node_type: "Else".to_string(),
+            children: vec![else_node],
+            ..Default::default()
+        });
     }
-    AstNode { node_type: "If".to_string(), children, ..Default::default() }
+    AstNode {
+        node_type: "If".to_string(),
+        children,
+        ..Default::default()
+    }
 }
 
 fn while_stmt_to_proto(while_stmt: &WhileStatement) -> AstNode {
     AstNode {
         node_type: "While".to_string(),
-        children: vec![expression_to_proto(&while_stmt.condition), block_to_proto(&while_stmt.body)],
+        children: vec![
+            expression_to_proto(&while_stmt.condition),
+            block_to_proto(&while_stmt.body),
+        ],
         ..Default::default()
     }
 }
@@ -282,16 +434,20 @@ fn for_stmt_to_proto(for_stmt: &ForStatement) -> AstNode {
             expression_to_proto(&for_stmt.iterable),
             block_to_proto(&for_stmt.body),
         ],
-        start_line: for_stmt.variable.line as u32, start_column: for_stmt.variable.column as u32,
+        start_line: for_stmt.variable.line as u32,
+        start_column: for_stmt.variable.column as u32,
         ..Default::default()
     }
 }
 
 fn identifier_to_proto(id: &Identifier) -> AstNode {
     AstNode {
-        node_type: "Identifier".to_string(), value: id.name.clone(),
-        start_line: id.line as u32, start_column: id.column as u32,
-        end_line: id.line as u32, end_column: (id.column + id.name.len()) as u32,
+        node_type: "Identifier".to_string(),
+        value: id.name.clone(),
+        start_line: id.line as u32,
+        start_column: id.column as u32,
+        end_line: id.line as u32,
+        end_column: (id.column + id.name.len()) as u32,
         ..Default::default()
     }
 }
@@ -303,20 +459,32 @@ fn literal_to_proto(lit: &Literal) -> AstNode {
         Literal::String(s) => (s.clone(), "StringLiteral"),
         Literal::Bool(b) => (b.to_string(), "BoolLiteral"),
     };
-    AstNode { node_type: node_type.to_string(), value, ..Default::default() }
+    AstNode {
+        node_type: node_type.to_string(),
+        value,
+        ..Default::default()
+    }
 }
 
 fn type_to_proto(ty: &Type) -> AstNode {
     let type_str = match ty {
-        Type::Int => "int", Type::Float => "float", Type::String => "string", Type::Bool => "bool",
+        Type::Int => "int",
+        Type::Float => "float",
+        Type::String => "string",
+        Type::Bool => "bool",
         Type::Void => "void",
     };
-    AstNode { node_type: "Type".to_string(), value: type_str.to_string(), ..Default::default() }
+    AstNode {
+        node_type: "Type".to_string(),
+        value: type_str.to_string(),
+        ..Default::default()
+    }
 }
 
 fn binary_expr_to_proto(left: &Expression, op: &BinaryOp, right: &Expression) -> AstNode {
     AstNode {
-        node_type: "Binary".to_string(), value: format!("{:?}", op),
+        node_type: "Binary".to_string(),
+        value: format!("{:?}", op),
         children: vec![expression_to_proto(left), expression_to_proto(right)],
         ..Default::default()
     }
@@ -324,7 +492,8 @@ fn binary_expr_to_proto(left: &Expression, op: &BinaryOp, right: &Expression) ->
 
 fn unary_expr_to_proto(op: &UnaryOp, expr: &Expression) -> AstNode {
     AstNode {
-        node_type: "Unary".to_string(), value: format!("{:?}", op),
+        node_type: "Unary".to_string(),
+        value: format!("{:?}", op),
         children: vec![expression_to_proto(expr)],
         ..Default::default()
     }
@@ -332,9 +501,11 @@ fn unary_expr_to_proto(op: &UnaryOp, expr: &Expression) -> AstNode {
 
 fn assignment_to_proto(target: &Identifier, value: &Expression) -> AstNode {
     AstNode {
-        node_type: "Assignment".to_string(), value: "=".to_string(),
+        node_type: "Assignment".to_string(),
+        value: "=".to_string(),
         children: vec![identifier_to_proto(target), expression_to_proto(value)],
-        start_line: target.line as u32, start_column: target.column as u32,
+        start_line: target.line as u32,
+        start_column: target.column as u32,
         ..Default::default()
     }
 }
@@ -369,34 +540,43 @@ fn array_to_proto(elements: &[Expression]) -> AstNode {
 fn object_to_proto(fields: &[(Identifier, Expression)]) -> AstNode {
     AstNode {
         node_type: "ObjectLiteral".to_string(),
-        children: fields.iter().map(|(key, val)| AstNode {
-            node_type: "ObjectField".to_string(),
-            children: vec![identifier_to_proto(key), expression_to_proto(val)],
-            ..Default::default()
-        }).collect(),
+        children: fields
+            .iter()
+            .map(|(key, val)| AstNode {
+                node_type: "ObjectField".to_string(),
+                children: vec![identifier_to_proto(key), expression_to_proto(val)],
+                ..Default::default()
+            })
+            .collect(),
         ..Default::default()
     }
 }
 
 fn splat_to_proto(expr: &Expression) -> AstNode {
     AstNode {
-        node_type: "Splat".to_string(), value: "@*".to_string(),
+        node_type: "Splat".to_string(),
+        value: "@*".to_string(),
         children: vec![expression_to_proto(expr)],
         ..Default::default()
     }
 }
 
 fn struct_inst_to_proto(name: &Identifier, fields: &[(Identifier, Expression)]) -> AstNode {
-     AstNode {
+    AstNode {
         node_type: "StructInstantiation".to_string(),
         value: name.name.clone(),
-        children: fields.iter().map(|(key, val)| AstNode {
-            node_type: "StructFieldInit".to_string(),
-            children: vec![identifier_to_proto(key), expression_to_proto(val)],
-            start_line: key.line as u32, start_column: key.column as u32,
-            ..Default::default()
-        }).collect(),
-        start_line: name.line as u32, start_column: name.column as u32,
+        children: fields
+            .iter()
+            .map(|(key, val)| AstNode {
+                node_type: "StructFieldInit".to_string(),
+                children: vec![identifier_to_proto(key), expression_to_proto(val)],
+                start_line: key.line as u32,
+                start_column: key.column as u32,
+                ..Default::default()
+            })
+            .collect(),
+        start_line: name.line as u32,
+        start_column: name.column as u32,
         ..Default::default()
     }
 }
@@ -410,11 +590,249 @@ fn block_to_proto(block: &Block) -> AstNode {
 }
 
 fn errors_to_proto(errors: &[SyntaxError]) -> Vec<ParserError> {
-    errors.iter().map(|e| {
-        let (error_type, message, line, column) = match e {
-            SyntaxError::UnexpectedToken(msg, l, c) => ("UnexpectedToken", msg.clone(), *l, *c),
-            _ => ("GenericError", format!("{}", e), 0, 0),
-        };
-        ParserError { error_type: error_type.to_string(), message, line: line as u32, column: column as u32, }
-    }).collect()
+    errors
+        .iter()
+        .map(|e| {
+            let (error_type, message, line, column) = match e {
+                SyntaxError::UnexpectedToken(msg, l, c) => {
+                    ("UnexpectedToken", msg.clone(), *l, *c)
+                }
+                _ => ("GenericError", format!("{}", e), 0, 0),
+            };
+            ParserError {
+                error_type: error_type.to_string(),
+                message,
+                line: line as u32,
+                column: column as u32,
+            }
+        })
+        .collect()
+}
+
+fn semantic_errors_to_proto(errors: &[AstSemanticError]) -> Vec<ProtoSemanticError> {
+    errors
+        .iter()
+        .map(|e| match e {
+            AstSemanticError::UndeclaredVariable(name, line, column) => ProtoSemanticError {
+                message: format!("Undeclared variable: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::RedeclaredVariable(name, line, column) => ProtoSemanticError {
+                message: format!("Redeclared variable: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::TypeMismatch(expected, found, line, column) => ProtoSemanticError {
+                message: format!("Type mismatch: expected {}, found {}", expected, found),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::InvalidAssignment(name, line, column) => ProtoSemanticError {
+                message: format!("Invalid assignment to constant: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::UndefinedStruct(name, line, column) => ProtoSemanticError {
+                message: format!("Undefined struct: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::RedeclaredStruct(name, line, column) => ProtoSemanticError {
+                message: format!("Redeclared struct: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::RedeclaredField(struct_name, field_name, line, column) => {
+                ProtoSemanticError {
+                    message: format!(
+                        "Redeclared field '{}' in struct '{}'",
+                        field_name, struct_name
+                    ),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::FieldNotFound(struct_name, field_name, line, column) => {
+                ProtoSemanticError {
+                    message: format!(
+                        "Field '{}' not found in struct '{}'",
+                        field_name, struct_name
+                    ),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::InvalidMemberAccess(name, line, column) => ProtoSemanticError {
+                message: format!("Invalid member access: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::InvalidFunctionCallTarget(line, column) => ProtoSemanticError {
+                message: "Invalid function call target".to_string(),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::UndefinedFunction(name, line, column) => ProtoSemanticError {
+                message: format!("Undefined function: {}", name),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::ArgumentCountMismatch(
+                func_name,
+                expected,
+                found,
+                line,
+                column,
+            ) => ProtoSemanticError {
+                message: format!(
+                    "Argument count mismatch in function '{}': expected {}, found {}",
+                    func_name, expected, found
+                ),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::ArgumentTypeMismatch(
+                func_name,
+                arg_index,
+                expected,
+                found,
+                line,
+                column,
+            ) => ProtoSemanticError {
+                message: format!(
+                    "Argument type mismatch in function '{}' at argument {}: expected {}, found {}",
+                    func_name, arg_index, expected, found
+                ),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::ReturnOutsideFunction(line, column) => ProtoSemanticError {
+                message: "Return statement outside function".to_string(),
+                line: *line as u32,
+                column: *column as u32,
+            },
+            AstSemanticError::ReturnTypeMismatch(expected, found, line, column) => {
+                ProtoSemanticError {
+                    message: format!("Return type mismatch: expected {}, found {}", expected, found),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::MissingReturnStatement(func_name, line, column) => {
+                ProtoSemanticError {
+                    message: format!("Missing return statement in function '{}'", func_name),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+            AstSemanticError::MissingMainFunction => ProtoSemanticError {
+                message: "Missing 'main' function".to_string(),
+                line: 0,
+                column: 0,
+            },
+            AstSemanticError::InvalidMainFunctionSignature(reason, line, column) => {
+                ProtoSemanticError {
+                    message: format!("Invalid 'main' function signature: {}", reason),
+                    line: *line as u32,
+                    column: *column as u32,
+                }
+            }
+        })
+        .collect()
+}
+
+fn symbol_table_to_proto(table: &SymbolTable) -> compiler::SymbolTable {
+    compiler::SymbolTable {
+        root_scope: Some(scope_to_proto(&table.get_root_scope())),
+    }
+}
+
+fn scope_to_proto(scope: &Scope) -> compiler::Scope {
+    compiler::Scope {
+        scope_name: scope.name.clone(),
+        scope_level: scope.level as u32,
+        symbols: scope.symbols.values().map(|s| symbol_to_proto(s, scope.level)).collect(),
+        children: scope.children.iter().map(scope_to_proto).collect(),
+    }
+}
+
+fn symbol_to_proto(symbol: &Symbol, scope_level: usize) -> compiler::Symbol {
+    let value_str = match symbol {
+        Symbol::Variable { value, .. } => value.as_ref().map(|v| match v {
+            ast::Literal::Int(i) => i.to_string(),
+            ast::Literal::Float(f) => f.to_string(),
+            ast::Literal::String(s) => s.clone(),
+            ast::Literal::Bool(b) => b.to_string(),
+        }),
+        Symbol::Constant { value, .. } => value.as_ref().map(|v| match v {
+            ast::Literal::Int(i) => i.to_string(),
+            ast::Literal::Float(f) => f.to_string(),
+            ast::Literal::String(s) => s.clone(),
+            ast::Literal::Bool(b) => b.to_string(),
+        }),
+        _ => None,
+    };
+
+    match symbol {
+        Symbol::Variable {
+            name,
+            type_,
+            line,
+            column,
+            ..            
+        } => compiler::Symbol {
+            name: name.clone(),
+            symbol_type: "Variable".to_string(),
+            data_type: type_.to_string(),
+            line: *line as u32,
+            column: *column as u32,
+            value: value_str,
+            scope_level: scope_level as u32,
+        },
+        Symbol::Function {
+            name,
+            return_type,
+            line,
+            column,
+            ..            
+        } => compiler::Symbol {
+            name: name.clone(),
+            symbol_type: "Function".to_string(),
+            data_type: return_type.to_string(),
+            line: *line as u32,
+            column: *column as u32,
+            value: None,
+            scope_level: scope_level as u32,
+        },
+        Symbol::Struct {
+            name,
+            line,
+            column,
+            ..            
+        } => compiler::Symbol {
+            name: name.clone(),
+            symbol_type: "Struct".to_string(),
+            data_type: "".to_string(),
+            line: *line as u32,
+            column: *column as u32,
+            value: None,
+            scope_level: scope_level as u32,
+        },
+        Symbol::Constant {
+            name,
+            type_,
+            line,
+            column,
+            ..            
+        } => compiler::Symbol {
+            name: name.clone(),
+            symbol_type: "Constant".to_string(),
+            data_type: type_.to_string(),
+            line: *line as u32,
+            column: *column as u32,
+            value: value_str,
+            scope_level: scope_level as u32,
+        },
+    }
 }

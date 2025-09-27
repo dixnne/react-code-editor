@@ -1,0 +1,63 @@
+---
+source: tests/integration_tests.rs
+expression: tests/cases/02_functions.dreamc
+---
+Program {
+    declarations: [
+        Function(
+            Function {
+                name: Identifier {
+                    name: "add",
+                    line: 2,
+                    column: 4,
+                },
+                parameters: [
+                    Parameter {
+                        name: Identifier {
+                            name: "a",
+                            line: 2,
+                            column: 8,
+                        },
+                        param_type: Int,
+                    },
+                    Parameter {
+                        name: Identifier {
+                            name: "b",
+                            line: 2,
+                            column: 16,
+                        },
+                        param_type: Int,
+                    },
+                ],
+                return_type: Int,
+                body: Block {
+                    statements: [
+                        Statement(
+                            Return(
+                                ReturnStatement {
+                                    value: Binary {
+                                        left: Identifier(
+                                            Identifier {
+                                                name: "a",
+                                                line: 3,
+                                                column: 12,
+                                            },
+                                        ),
+                                        op: Plus,
+                                        right: Identifier(
+                                            Identifier {
+                                                name: "b",
+                                                line: 3,
+                                                column: 16,
+                                            },
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                    ],
+                },
+            },
+        ),
+    ],
+}
