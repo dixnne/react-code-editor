@@ -4,6 +4,7 @@ package compiler;
 
 import "lexer.proto";
 import "semantic.proto";
+import "ast.proto";
 
 service Parser {
   rpc Parse (ParseRequest) returns (ParseResponse);
@@ -12,6 +13,8 @@ service Parser {
 
 service Compiler {
   rpc Compile(CompilerRequest) returns (CompilerResponse);
+  rpc GetAst(CompilerRequest) returns (Program);
+  rpc GetAnnotatedAst(CompilerRequest) returns (AnnotatedNode);
 }
 
 message CompilerRequest {

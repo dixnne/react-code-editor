@@ -6,33 +6,53 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
-// Importaciones de ACE Editor. Se usa 'ace-builds' que es la dependencia estándar.
+// Importaciones de ACE Editor
 import "react-ace-builds/node_modules/ace-builds/src-noconflict/theme-dracula";
 import "react-ace-builds/node_modules/ace-builds/src-noconflict/ext-language_tools";
-import "react-ace-builds/node_modules/ace-builds/src-noconflict/mode-javascript"; // Modo por defecto, se reemplazará más adelante
+import "react-ace-builds/node_modules/ace-builds/src-noconflict/mode-javascript";
 import DreamCMode from "./ace/mode/dreamc_mode";
-
-// --- FIX: Mocks for local files to resolve build errors in this environment ---
-// In your local project, you should use your actual import statements.
-// import DreamCMode from "./ace/mode/dreamc_mode.js";
 import Themes from "./assets/themes.js";
 
-
-// Simula la API de Electron si no está disponible (para desarrollo en navegador)
+// Simula la API de Electron si no está disponible
 if (!window.electron) {
     window.electron = {
-        openFile: async () => { console.log("Mock openFile called"); return { content: "// Archivo de ejemplo abierto\nfunction main() {\n  put('Hola, DreamC!');\n}", path: "/ruta/falsa/ejemplo.dc" }; },
-        saveFile: async (file) => { console.log("Mock saveFile called with:", file); return true; },
-        saveFileAs: async (file) => { console.log("Mock saveFileAs called with:", file); return { path: "/ruta/falsa/nuevo.dc" }; },
+        openFile: async () => ({ content: "// Archivo de ejemplo\nfunction main() {}", path: "/ruta/falsa/ejemplo.dc" }),
+        saveFile: async (file) => true,
+        saveFileAs: async (file) => ({ path: "/ruta/falsa/nuevo.dc" }),
         runLexer: async (code) => {
             console.log("Mock runLexer");
             if (code.includes("error")) return { tokens: [{ token_type: "Invalid", lexeme: "error", line: 1, column: 1 }] };
             return { tokens: [{ token_type: "Keyword", lexeme: "function", line: 1, column: 1 }, { token_type: "Identifier", lexeme: "main", line: 1, column: 10 }] };
         },
-        runParser: async (code) => {
-            console.log("Mock runParser");
-            if (code.includes("error")) return { ast: null, errors: [{ error_type: "Syntax Error", message: "Unexpected token", line: 1, column: 1 }] };
-            return { ast: { node_type: "Program", children: [{ node_type: "FunctionDeclaration", value: "main" }] }, errors: [] };
+        runCompiler: async (code) => {
+            console.log("Mock runCompiler con nueva estructura");
+            if (code.includes("error")) {
+                return {
+                    lexer_response: { tokens: [{ token_type: "Keyword", lexeme: "function", line: 1, column: 1 }] },
+                    parse_response: { ast: null, errors: [{ message: "Token inesperado", line: 1, column: 10 }] },
+                    semantic_response: { errors: [{ message: "Variable no declarada", line: 2, column: 5 }] }
+                };
+            }
+            return {
+                lexer_response: { tokens: [{ token_type: "Keyword", lexeme: "function", line: 1, column: 1 }, { token_type: "Identifier", lexeme: "main", line: 1, column: 10 }] },
+                parse_response: { ast: { node_type: "Program", children: [{ node_type: "FunctionDeclaration", value: "main" }] }, errors: [] },
+                semantic_response: { 
+                    annotated_ast: { node_type: "Program", children: [{ node_type: "FunctionDeclaration", value: "main", inferred_type: "void" }], inferred_type: "void" }, 
+                    errors: [], 
+                    symbol_table: {
+                        root_scope: {
+                            symbols: { 'myGlobal': { type: 'int', defined_at: { line: 1, column: 5 } } },
+                            children_scopes: [
+                                {
+                                    scope_name: "main",
+                                    symbols: { 'x': { type: 'float', defined_at: { line: 3, column: 10 } } },
+                                    children_scopes: []
+                                }
+                            ]
+                        }
+                    } 
+                }
+            };
         },
     };
 }
@@ -75,22 +95,6 @@ const TokenTable = ({ tokens, emptyMessage = 'No hay tokens para mostrar.' }) =>
     );
 };
 
-const TreeViewStyles = () => (
-    <style>{`
-        .tree-view-container { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 14px; padding: 12px; color: #cbd5e1; }
-        .tree-node .node-children { margin-left: 1rem; padding-left: 1rem; border-left: 1px dashed #4a5568; }
-        .node-card { display: flex; align-items: center; padding: 4px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
-        .node-card:hover { background-color: #374151; }
-        .expand-icon { width: 20px; text-align: center; margin-right: 8px; color: #9ca3af; }
-        .node-content { display: flex; align-items: center; gap: 0.5rem; }
-        .node-type { font-weight: 600; color: #93c5fd; }
-        .node-value { color: #a7f3d0; }
-        .node-location { color: #6b7280; font-size: 12px; }
-        .tree-empty-message { padding: 20px; text-align: center; color: #6b7280; }
-    `}</style>
-);
-
-// TreeView Component - Themed and Compact
 const TreeNode = ({ node, theme }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const hasChildren = node.children && node.children.length > 0;
@@ -100,6 +104,7 @@ const TreeNode = ({ node, theme }) => {
     const locationColor = theme.text;
     const hoverBgColor = theme.secondarySemi;
     const borderColor = theme.text;
+    const inferredTypeColor = theme.syntax.string; 
 
     return (
         <div>
@@ -116,12 +121,13 @@ const TreeNode = ({ node, theme }) => {
                 <div className="flex items-baseline gap-x-2">
                     <span className="font-semibold" style={{ color: nodeTypeColor }}>{node.node_type}</span>
                     {node.value && <span style={{ color: nodeValueColor }}>: {node.value}</span>}
+                    {node.inferred_type && <span className="italic" style={{ color: inferredTypeColor }}> → {node.inferred_type}</span>}
                     {(node.start_line !== undefined) && <span className="text-xs font-bold" style={{ color: locationColor }}>(L{node.start_line}:{node.start_column})</span>}
                 </div>
             </div>
             {isExpanded && hasChildren && (
                 <div
-                    className="ml-2 pl-2" // Compact indentation
+                    className="ml-2 pl-2"
                     style={{ borderLeft: `1px dashed ${borderColor}` }}
                 >
                     {node.children.map((child, index) => <TreeNode key={index} node={child} theme={theme} />)}
@@ -134,15 +140,72 @@ const TreeNode = ({ node, theme }) => {
 const TreeView = ({ data, theme }) => {
     if (!data || !data.ast) {
         return <div className="p-4 text-center" style={{color: theme.tertiary + '80'}}>
-            {!data ? 'No data provided' : 'AST no disponible. Verifique errores de sintaxis.'}
+            { 'AST no disponible. Verifique errores o espere la compilación.' }
         </div>;
     }
     return (
-        <div
-            className="font-mono text-sm p-2 h-full overflow-auto"
-            style={{ color: theme.tertiary }}
-        >
+        <div className="font-mono text-sm p-2 h-full overflow-auto" style={{ color: theme.tertiary }}>
             <TreeNode node={data.ast} theme={theme} />
+        </div>
+    );
+};
+
+// --- MODIFICADO ---: Añadida la columna "Valor" para mostrar el valor de las variables.
+const SymbolTableView = ({ symbolTable, theme }) => {
+    if (!symbolTable || !symbolTable.root_scope) {
+        return <div className="p-4 text-center text-gray-400">Tabla de símbolos no disponible.</div>;
+    }
+
+    const Scope = ({ scope, name, level = 0 }) => {
+        const validSymbols = Array.isArray(scope.symbols) ? scope.symbols.filter(Boolean) : [];
+        const hasSymbols = validSymbols.length > 0;
+
+        return (
+            <div className="font-mono text-sm" style={{ paddingLeft: `${level * 20}px` }}>
+                <div className="font-bold py-1" style={{ color: theme.tertiary }}>
+                    Ámbito: <span style={{ color: theme.syntax.keyword }}>{name}</span>
+                </div>
+                {hasSymbols ? (
+                    <table className="w-full text-left text-xs my-2">
+                        <thead style={{ color: theme.tertiary + '99' }}>
+                            <tr>
+                                <th className="px-2 py-1 border-b" style={{ borderColor: theme.secondary }}>Identificador</th>
+                                <th className="px-2 py-1 border-b" style={{ borderColor: theme.secondary }}>Tipo Símbolo</th>
+                                <th className="px-2 py-1 border-b" style={{ borderColor: theme.secondary }}>Tipo Dato</th>
+                                <th className="px-2 py-1 border-b" style={{ borderColor: theme.secondary }}>Definido en</th>
+                                {/* --- NUEVO ---: Cabecera para la columna de valor */}
+                                <th className="px-2 py-1 border-b" style={{ borderColor: theme.secondary }}>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody style={{ color: theme.tertiary }}>
+                            {validSymbols.map((symbol) => (
+                                <tr key={symbol.name + symbol.line + symbol.column}>
+                                    <td className="px-2 py-1 border-b" style={{ borderColor: theme.secondary, color: theme.syntax.identifier }}>{symbol.name}</td>
+                                    <td className="px-2 py-1 border-b" style={{ borderColor: theme.secondary, color: theme.syntax.string }}>{symbol.symbol_type}</td>
+                                    <td className="px-2 py-1 border-b" style={{ borderColor: theme.secondary, color: theme.syntax.numeric }}>{symbol.data_type}</td>
+                                    <td className="px-2 py-1 border-b" style={{ borderColor: theme.secondary }}>L{symbol.line}:{symbol.column}</td>
+                                    {/* --- NUEVO ---: Celda para mostrar el valor de la variable */}
+                                    <td className="px-2 py-1 border-b" style={{ borderColor: theme.secondary }}>
+                                        {symbol.symbol_type === 'Variable' ? `"${symbol.value}"` : '—'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : (
+                    <p className="text-xs text-gray-500 px-2 italic"> (No hay símbolos en este ámbito)</p>
+                )}
+                
+                {Array.isArray(scope.children) && scope.children.map((childScope, index) => (
+                    <Scope key={index} scope={childScope} name={childScope.scope_name || `hijo_${index}`} level={level + 1} />
+                ))}
+            </div>
+        );
+    };
+
+    return (
+        <div className="p-3 overflow-auto h-full">
+            <Scope scope={symbolTable.root_scope} name={symbolTable.root_scope.scope_name || 'Global'} />
         </div>
     );
 };
@@ -155,7 +218,7 @@ const Sidebar = ({ isOpen, onClose }) => (
                 <X size={20} className="text-gray-400" />
             </button>
         </div>
-        <div className="p-4 text-gray-300"><p>Contenido del explorador de archivos...</p></div>
+        <div className="p-4 text-gray-300"><p>Contenido del explorador...</p></div>
     </div>
 );
 
@@ -243,7 +306,7 @@ const Tabs = ({ items, activeTab, setActiveTab, theme }) => (
     <div className="flex items-center border-b px-2" style={{ borderColor: theme.primary, backgroundColor: theme.secondary }}>
         {items.map((item, index) => (
             <button key={item} onClick={() => setActiveTab(index)}
-                className={clsx("px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors duration-200", { "border-white-400 text-white": activeTab === index, "border-transparent text-white hover:text-white": activeTab !== index })}>
+                className={clsx("px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors duration-200", { "border-blue-400 text-white": activeTab === index, "border-transparent text-gray-400 hover:text-white": activeTab !== index })}>
                 {item}
             </button>
         ))}
@@ -253,17 +316,13 @@ const Tabs = ({ items, activeTab, setActiveTab, theme }) => (
 const DynamicAceStyles = ({ theme }) => {
     useEffect(() => {
         const styleId = 'dynamic-ace-theme-styles';
-        // Limpia estilos antiguos para evitar conflictos
         document.getElementById(styleId)?.remove();
-
         if (!theme.syntax) return;
 
         const style = document.createElement('style');
         style.id = styleId;
-        
         const s = theme.syntax;
 
-        // Construye el CSS a partir del objeto de tema
         style.innerHTML = `
             .ace_editor .ace_constant.ace_numeric { color: ${s.numeric} !important; }
             .ace_editor .ace_identifier, .ace_editor .ace_paren, .ace_editor .ace_punctuation { color: ${s.identifier} !important; }
@@ -274,15 +333,13 @@ const DynamicAceStyles = ({ theme }) => {
             .ace_editor .ace_string { color: ${s.string} !important; }
             .ace_editor .ace_keyword.ace_operator[title="special"] { color: ${s.operatorSpecial} !important; }
         `;
-
         document.head.appendChild(style);
-
         return () => {
             document.getElementById(styleId)?.remove();
         };
-    }, [theme]); // Se ejecuta cada vez que el tema cambia
+    }, [theme]);
 
-    return null; // El componente no renderiza nada en el DOM
+    return null;
 };
 
 
@@ -292,12 +349,15 @@ function App() {
     const [themeCode, setThemeCode] = useState("pointerOfDoom");
     const [editorContent, setEditorContent] = useState("// ¡Bienvenido a Pointer of Doom!\n");
     const [filePath, setFilePath] = useState(null);
-    const [tokens, setTokens] = useState({ tokens: [] });
-    const [syntax, setSyntax] = useState({ ast: null, errors: [] });
     const [line, setLine] = useState(1);
     const [column, setColumn] = useState(1);
     const [analysisTab, setAnalysisTab] = useState(0);
     const [consoleTab, setConsoleTab] = useState(0);
+
+    const [tokens, setTokens] = useState({ tokens: [] });
+    const [syntax, setSyntax] = useState({ ast: null, errors: [] });
+    // --- MODIFICADO ---: El estado semántico ahora incluye la tabla de símbolos
+    const [semantic, setSemantic] = useState({ annotated_ast: null, errors: [], symbol_table: null }); 
 
     const aceEditorRef = useRef(null);
     const currentTheme = Themes[themeCode] || Themes.pointerOfDoom;
@@ -308,7 +368,6 @@ function App() {
             const session = editor.getSession();
             const customMode = new DreamCMode();
             session.setMode(customMode);
-            console.log("Modo personalizado 'DreamC' establecido.");
         }
     }, []);
 
@@ -328,17 +387,30 @@ function App() {
             setAction(null);
         };
         runAction();
-    }, [action]);
+    }, [action, editorContent, filePath]);
 
     useEffect(() => {
         const compileCode = async () => {
-            if (editorContent.trim() === "") { setTokens({ tokens: [] }); setSyntax({ ast: null, errors: [] }); return; }
+            if (editorContent.trim() === "") {
+                setTokens({ tokens: [] });
+                setSyntax({ ast: null, errors: [] });
+                setSemantic({ annotated_ast: null, errors: [], symbol_table: null });
+                return;
+            }
             try {
                 const lexerResult = await window.electron.runLexer(editorContent);
-                const parserResult = await window.electron.runParser(editorContent);
-                setTokens(lexerResult);
-                setSyntax(parserResult);
-            } catch (error) { console.error("Error durante la compilación:", error); }
+                if (lexerResult) setTokens(lexerResult);
+                const result = await window.electron.runCompiler(editorContent);
+                if (result) {
+                    setSyntax(result.parse_response || { ast: null, errors: [] });
+                    setSemantic(result.semantic_response || { annotated_ast: null, errors: [], symbol_table: null });
+                }
+            } catch (error) {
+                console.error("Error durante la compilación:", error);
+                setTokens({ tokens: [] });
+                setSyntax({ ast: null, errors: [] });
+                setSemantic({ annotated_ast: null, errors: [], symbol_table: null });
+            }
         };
         const debounce = setTimeout(compileCode, 500);
         return () => clearTimeout(debounce);
@@ -346,13 +418,15 @@ function App() {
     
     const handleAction = (newAction) => setAction(newAction);
 
+    // --- MODIFICADO ---: `renderAnalysisPanel` ahora muestra la tabla de símbolos en la pestaña "Hash"
     const renderAnalysisPanel = () => {
         switch (analysisTab) {
             case 0: return <TokenTable tokens={tokens} />;
-            case 1: return <TreeView data={syntax} theme={Themes[themeCode]} />;
-            case 2: return <div className="p-4 text-gray-400">Panel de Análisis Semántico (placeholder)</div>;
+            case 1: return <TreeView data={syntax} theme={currentTheme} />;
+            case 2: return <TreeView data={{ ast: semantic.annotated_ast }} theme={currentTheme} />;
             case 3: return <div className="p-4 text-gray-400">Panel de Código Intermedio (placeholder)</div>;
-            case 4: return <div className="p-4 text-gray-400">Panel de Tabla de Hash (placeholder)</div>;
+            // --- NUEVO ---: Llama al nuevo componente para renderizar la tabla de símbolos
+            case 4: return <SymbolTableView symbolTable={semantic.symbol_table} theme={currentTheme} />;
             default: return null;
         }
     };
@@ -361,15 +435,16 @@ function App() {
         const ErrorsDisplay = ({ errors, type }) => (
             <div className="p-4 text-sm font-mono text-gray-300 overflow-auto h-full">
                 {(!errors || errors.length === 0)
-                    ? `No hay errores de ${type}.`
+                    ? `No hay errores de tipo ${type}.`
                     : errors.map((err, i) => <p key={i} className="text-red-400">Error: {err.message || JSON.stringify(err)} en línea {err.line} col {err.column}</p>)
                 }
             </div>
         );
         switch (consoleTab) {
-            case 0: return <ErrorsDisplay errors={tokens.tokens?.filter(t => t.token_type === "Invalid")} type="léxicos" />;
-            case 1: return <ErrorsDisplay errors={syntax.errors} type="sintaxis" />;
-            case 2: return <div className="p-4 text-gray-300">Salida de ejecución (placeholder)</div>;
+            case 0: return <ErrorsDisplay errors={tokens.tokens?.filter(t => t.token_type === "Invalid")} type="léxico" />;
+            case 1: return <ErrorsDisplay errors={syntax.errors} type="sintáctico" />;
+            case 2: return <ErrorsDisplay errors={semantic.errors} type="semántico" />;
+            case 3: return <div className="p-4 text-gray-300">Salida de ejecución (placeholder)</div>;
             default: return null;
         }
     };
@@ -383,7 +458,7 @@ function App() {
                     <Panel defaultSize={75} minSize={20}>
                         <PanelGroup direction="horizontal">
                             <Panel defaultSize={60} minSize={30}>
-                                <div className="flex flex-col h-full w-full bg-gray-900 rounded-tl-md overflow-hidden">
+                                <div className="flex flex-col h-full w-full rounded-tl-md overflow-hidden" style={{backgroundColor: currentTheme.secondary}}>
                                     <AceEditor
                                         ref={aceEditorRef}
                                         width="100%"
@@ -417,7 +492,7 @@ function App() {
                     <PanelResizeHandle className="h-2 bg-gray-700 hover:bg-blue-600 transition-colors" />
                     <Panel defaultSize={25} minSize={10}>
                          <div className="flex flex-col h-full" style={{ backgroundColor: currentTheme.primary }}>
-                            <Tabs items={["Lexical Errors", "Syntax Errors", "Execution"]} activeTab={consoleTab} setActiveTab={setConsoleTab} theme={currentTheme} />
+                            <Tabs items={["Lexical Errors", "Syntax Errors", "Semantic Errors", "Execution"]} activeTab={consoleTab} setActiveTab={setConsoleTab} theme={currentTheme} />
                             <div className="flex-grow overflow-auto" style={{ backgroundColor: currentTheme.secondarySemi }}>{renderConsolePanel()}</div>
                             <div className="flex justify-end items-center h-8 px-4 text-sm" style={{ backgroundColor: currentTheme.tertiary, color: currentTheme.primary }}>
                                 <span>{filePath ? filePath.split(/[\\/]/).pop() : "Untitled"} - DreamC main</span>

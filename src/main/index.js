@@ -124,6 +124,20 @@ ipcMain.handle('run-compiler', async (_event, sourceCode) => {
   });
 });
 
+ipcMain.handle('run-lexer', async (_event, code) => {
+  console.log("Received code for lexing:", code);
+  return new Promise((resolve, reject) => {
+    clientLexer.Analyze({ input: code }, (err, response) => {
+      if (err) {
+        console.error("gRPC Lexer Error:", err);
+        reject(err.message);
+      } else {
+        console.log("gRPC Lexer Response:", response);
+        resolve(response);
+      }
+    });
+  });
+});
 
 // File I/O Handlers
 ipcMain.handle("open-file", async () => {
