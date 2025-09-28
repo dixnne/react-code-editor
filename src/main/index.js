@@ -44,9 +44,20 @@ if (!compilerProto) {
 
 // Create a SINGLE client for the main Compiler service
 // This is more efficient than creating clients for each sub-service.
-const clientCompiler = new compilerProto.Compiler('localhost:50051', grpc.credentials.createInsecure());
-console.log("✅ gRPC Compiler service client created and ready.");
+const clientLexer = new compilerProto.Lexer(
+  'localhost:50051',
+  grpc.credentials.createInsecure()
+);
 
+const clientParser = new compilerProto.Parser(
+  'localhost:50051',
+  grpc.credentials.createInsecure()
+);
+
+const clientCompiler = new compilerProto.Compiler(
+  'localhost:50051',
+  grpc.credentials.createInsecure()
+);
 
 // --- ELECTRON WINDOW CREATION ---
 

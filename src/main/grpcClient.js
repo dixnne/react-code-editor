@@ -25,9 +25,11 @@ const packageDefinition = protoLoader.loadSync(
 
 // Cargar la definición y acceder al paquete UNIFICADO 'compiler'
 const compilerProto = grpc.loadPackageDefinition(packageDefinition).compiler;
+const lexerProto = grpc.loadPackageDefinition(packageDefinition).lexer;
 
 // Crear un cliente para el servicio Lexer
-const clientLexer = new compilerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
+const clientLexer = new lexerProto.Lexer('localhost:50051', grpc.credentials.createInsecure());
+console.log("✅ Cliente del servicio gRPC Lexer creado y listo.");
 // (Si también usas el parser aquí, créalo de la misma forma)
 // const clientParser = new compilerProto.Parser('localhost:50051', grpc.credentials.createInsecure());
 
