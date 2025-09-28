@@ -1,0 +1,41 @@
+// --- Programa de Validación Correcta ---
+// Demuestra el uso correcto de las características del lenguaje.
+
+// Declaración de una función con parámetros.
+fn calculate_new_score(current_score: int, points_added: int) -> int {
+    let bonus: int = 10; // Variable con ámbito local a la función.
+    return current_score + points_added + bonus;
+}
+
+fn main() -> int {
+    // 1. Declaración y asignación de cada tipo de variable. [cite: 3]
+    let level: int = 10;
+    let time_remaining: float = 120.5;
+    let is_active: bool = true;
+
+    // 2. Operaciones correctas con cada tipo. [cite: 5]
+    level = level * 2 + 1; // Operaciones con enteros.
+    time_remaining = time_remaining / 2.0; // Operaciones con flotantes.
+
+    // 3. Uso correcto de estructuras repetitivas (while). [cite: 11]
+    while is_active == true {
+        level = level + 1;
+        
+        // 4. Uso correcto de estructuras condicionales (if). [cite: 10]
+        if level > 15 {
+            let victory_points: int = 500; // Variable con ámbito de bloque 'if'. [cite: 13]
+            is_active = false;
+        } else {
+            time_remaining = time_remaining - 10.0;
+        }
+
+        if time_remaining <= 0.0 {
+            is_active = false;
+        }
+    }
+
+    // 5. Llamada a una función con parámetros del tipo correcto. [cite: 12]
+    let final_score: int = calculate_new_score(level, 100);
+
+    return final_score; // Devuelve un valor entero, como lo exige la firma de main.
+}

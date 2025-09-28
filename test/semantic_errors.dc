@@ -1,0 +1,49 @@
+// --- Programa de Comprobación de Errores ---
+// Contiene una lista de errores semánticos para ser detectados.
+
+fn process_data(value: int) -> void {
+    // Esta función se usará para probar errores de parámetros.
+}
+
+fn main() -> int {
+
+    // // 1. Error de tipo en la asignación.
+    let score: int = "cien"; 
+
+    // // 2. Error de operación inválida para el tipo.
+    let message: bool = "hola" * 3; 
+
+    // // 3. Error de tipo en una operación.
+    let health: int = 100 + 25.5; // No se puede sumar int y float.
+
+    // // 4. Uso de una variable no declarada.
+    let total: int = health + experience; 
+
+    // // 5. Redeclaración de una variable en el mismo ámbito.
+    let mana: int = 50;
+    let mana: float = 75.0; 
+
+    // // 6. Error de tipo en una condición 'if'. 
+    if (mana + 10) {
+        mana = 0;
+    }
+
+    // // 7. Error de tipo en una condición 'while'. 
+    while (health) {
+        health = health - 1;
+    }
+    
+    // // 8. Error de tipo en parámetros de función.
+    process_data(true); 
+
+    // // 9. Error de número de parámetros en llamada a función.
+    process_data(10, 20);
+
+    // // 10. Error de ámbito: usar una variable fuera de su scope. 
+    if (health > 0) {
+        let temp_shield: int = 100;
+    }
+    health = health + temp_shield; // temp_shield no existe aquí.
+
+    return 0;
+}
