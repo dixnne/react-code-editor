@@ -6,6 +6,7 @@ mod token;
 mod reflection; // <-- Add this
 mod semantic_analyzer;
 mod symbol_table;
+mod llvm_compiler;
 
 use crate::grpc_services::{CompilerService, LexerService, ParserService, compiler::compiler_server::CompilerServer, compiler::lexer_server::LexerServer, compiler::parser_server::ParserServer};
 use tonic::transport::Server;

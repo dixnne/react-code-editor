@@ -19,9 +19,10 @@ use compiler::{
     parser_server::Parser,
     AnalyzeRequest, AnnotatedNode, AstNode, CompilerRequest, CompilerResponse, ParseRequest,
     ParseResponse, ParseSourceRequest, ParserError, SemanticAnalysisResponse,
-    SemanticError as ProtoSemanticError, Token, TokenList, Program as ProtoProgram
+    SemanticError as ProtoSemanticError, Token, TokenList, Program as ProtoProgram,
+    LlvmTranslateResponse
 };
-
+use crate::llvm_compiler::compile_to_llvm_ir;
 // --- Implementación del Servicio del Lexer ---
 
 #[derive(Debug, Default)]
@@ -209,6 +210,64 @@ impl Compiler for CompilerService {
         let annotated_ast = semantic_analyzer.analyze(&ast);
 
         Ok(Response::new(annotated_ast))
+    }
+
+    async fn llvm_translate(
+        &self,
+        request: Request<CompilerRequest>,
+    ) -> Result<Response<LlvmTranslateResponse>, Status> {
+        let source_code = request.into_inner().source;
+
+        // 1. Lexer
+        let mut lexer = LexicalAnalyzer::new(&source_code);
+        let tokens = lexer.scan_tokens();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
+
+        // 2. Parser
+        let ParseResult {
+            ast,
+            errors: parse_errors,
+        } = parse_tokens(&filtered_tokens);
+
+        if !parse_errors.is_empty() {
+            return Err(Status::invalid_argument(format!(
+                "Syntax errors found: {:?}",
+                parse_errors
+            )));
+        }
+
+        // 3. Semantic Analyzer
+        let mut semantic_analyzer = SemanticAnalyzer::new();
+        semantic_analyzer.analyze(&ast);
+
+        if !semantic_analyzer.errors.is_empty() {
+            return Err(Status::invalid_argument(format!(
+                "Semantic errors found: {:?}",
+                semantic_analyzer.errors
+            )));
+        }
+
+        // 4. LLVM Compilation
+        match compile_to_llvm_ir(&ast) {
+            Ok(llvm_ir) => Ok(Response::new(LlvmTranslateResponse {
+                llvm_ir,
+            })),
+            Err(_) => Ok(Response::new(LlvmTranslateResponse {
+                llvm_ir: String::new(),
+            })),
+        }
     }
 }
 

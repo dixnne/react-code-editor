@@ -15,6 +15,11 @@ service Compiler {
   rpc Compile(CompilerRequest) returns (CompilerResponse);
   rpc GetAst(CompilerRequest) returns (Program);
   rpc GetAnnotatedAst(CompilerRequest) returns (AnnotatedNode);
+  rpc LlvmTranslate(CompilerRequest) returns (LLVMTranslateResponse);
+}
+
+message LLVMTranslateResponse {
+  string llvm_ir = 1;
 }
 
 message CompilerRequest {

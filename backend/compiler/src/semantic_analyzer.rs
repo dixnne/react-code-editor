@@ -640,7 +640,35 @@ impl SemanticAnalyzer {
                     ..Default::default()
                 }
             }
-            _ => AnnotatedNode::default(),
+            Expression::Unary { op, expr } => {
+                let expr_node = self.analyze_expression(expr);
+                let expr_type = Type::from_str(&expr_node.inferred_type).unwrap_or(Type::Void);
+                
+                // Unary operations preserve the type of their operand
+                AnnotatedNode {
+                    node_type: "UnaryExpression".to_string(),
+                    value: format!("{:?}", op),
+                    children: vec![expr_node],
+                    inferred_type: expr_type.to_string(),
+                    ..Default::default()
+                }
+            }
+            Expression::Grouped(expr) => {
+                // Grouped expressions just preserve the type of the inner expression
+                let inner = self.analyze_expression(expr);
+                AnnotatedNode {
+                    node_type: "GroupedExpression".to_string(),
+                    children: vec![inner.clone()],
+                    inferred_type: inner.inferred_type,
+                    ..Default::default()
+                }
+            }
+            _ => AnnotatedNode {
+                node_type: "UnsupportedExpression".to_string(),
+                value: format!("{:?}", expression),
+                inferred_type: "Void".to_string(),
+                ..Default::default()
+            },
         }
     }
 

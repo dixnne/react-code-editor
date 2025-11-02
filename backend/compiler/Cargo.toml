@@ -9,16 +9,25 @@ edition = "2024"
 name = "compiler"
 path = "src/lib.rs"
 
-# Esta sección define tu ejecutable.
+# Esta sección define tu ejecutable (gRPC server).
 [[bin]]
 name = "compiler"
 path = "src/main.rs"
+
+# Esta sección define el compilador CLI.
+[[bin]]
+name = "dreamcc"
+path = "src/dreamcc.rs"
 
 [dependencies]
 prost = "0.13.5"
 tonic = { version = "0.12.0"}
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tonic-reflection = "0.12.0"
+inkwell = { version = "0.6.0", features = ["llvm18-1"] }
+llvm-sys = { version = "181.2.0", features = ["force-static"] }
+clap = { version = "4.4", features = ["derive"] }
+colored = "2.0"
 
 [build-dependencies]
 tonic-build = "0.10"

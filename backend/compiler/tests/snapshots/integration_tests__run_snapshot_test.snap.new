@@ -1,62 +1,38 @@
 ---
 source: tests/integration_tests.rs
 assertion_line: 26
-expression: tests/cases/02_functions.dreamc
+expression: tests/cases/03_syntax_error.dreamc
 ---
 Program {
     declarations: [
+        Variable(
+            VariableDeclaration {
+                identifier: Identifier {
+                    name: "x",
+                    line: 2,
+                    column: 5,
+                },
+                var_type: Some(
+                    Int,
+                ),
+                value: Literal(
+                    Int(
+                        10,
+                    ),
+                ),
+            },
+        ),
         Function(
             Function {
                 name: Identifier {
-                    name: "add",
-                    line: 2,
+                    name: "my_func",
+                    line: 3,
                     column: 4,
                 },
-                parameters: [
-                    Parameter {
-                        name: Identifier {
-                            name: "a",
-                            line: 2,
-                            column: 8,
-                        },
-                        param_type: Int,
-                    },
-                    Parameter {
-                        name: Identifier {
-                            name: "b",
-                            line: 2,
-                            column: 16,
-                        },
-                        param_type: Int,
-                    },
-                ],
-                return_type: Int,
+                parameters: [],
+                return_type: Void,
                 body: Block {
-                    statements: [
-                        Statement(
-                            Return(
-                                ReturnStatement {
-                                    value: Binary {
-                                        left: Identifier(
-                                            Identifier {
-                                                name: "a",
-                                                line: 3,
-                                                column: 12,
-                                            },
-                                        ),
-                                        op: Plus,
-                                        right: Identifier(
-                                            Identifier {
-                                                name: "b",
-                                                line: 3,
-                                                column: 16,
-                                            },
-                                        ),
-                                    },
-                                },
-                            ),
-                        ),
-                    ],
+                    statements: [],
                 },
             },
         ),

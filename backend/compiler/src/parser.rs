@@ -164,7 +164,8 @@ impl<'a> Parser<'a> {
 
     fn type_annotation(&mut self) -> Result<Type, SyntaxError> {
         let type_token = self.consume(TokenType::Identifier, "Se esperaba un nombre de tipo.")?;
-        match type_token.lexeme.as_str() {
+        let type_str = type_token.lexeme.to_lowercase();
+        match type_str.as_str() {
             "int" => Ok(Type::Int),
             "float" => Ok(Type::Float),
             "string" => Ok(Type::String),
@@ -272,7 +273,9 @@ impl<'a> Parser<'a> {
     }
 
     fn if_statement(&mut self) -> Result<IfStatement, SyntaxError> {
+        self.consume(TokenType::LeftParen, "Se esperaba '(' después de 'if'.")?;
         let condition = self.logical_or()?;
+        self.consume(TokenType::RightParen, "Se esperaba ')' después de la condición.")?;
         let then_block = self.block_statement()?;
         let mut else_block = None;
 
@@ -289,7 +292,9 @@ impl<'a> Parser<'a> {
     }
 
     fn while_statement(&mut self) -> Result<WhileStatement, SyntaxError> {
+        self.consume(TokenType::LeftParen, "Se esperaba '(' después de 'while'.")?;
         let condition = self.logical_or()?;
+        self.consume(TokenType::RightParen, "Se esperaba ')' después de la condición.")?;
         let body = self.block_statement()?;
         Ok(WhileStatement { condition, body })
     }
