@@ -28,7 +28,7 @@ impl<'ctx> Compiler<'ctx> {
         // PassManager will optimize functions
         fpm.initialize();
 
-        Compiler {
+        let compiler = Compiler {
             context,
             builder,
             module,
@@ -36,7 +36,25 @@ impl<'ctx> Compiler<'ctx> {
             variables: HashMap::new(),
             variable_types: HashMap::new(),
             current_function: None,
-        }
+        };
+
+        // Declare external C library functions
+        compiler.declare_external_functions();
+
+        compiler
+    }
+
+    /// Declare external C standard library functions like printf and puts
+    fn declare_external_functions(&self) {
+        // Declare printf: i32 printf(i8*, ...)
+        let i32_type = self.context.i32_type();
+        let i8_ptr_type = self.context.ptr_type(AddressSpace::default());
+        let printf_type = i32_type.fn_type(&[i8_ptr_type.into()], true); // true = variadic
+        self.module.add_function("printf", printf_type, None);
+
+        // Declare puts: i32 puts(i8*)
+        let puts_type = i32_type.fn_type(&[i8_ptr_type.into()], false);
+        self.module.add_function("puts", puts_type, None);
     }
 
     pub fn compile(&mut self, program: &Program) -> Result<String, String> {

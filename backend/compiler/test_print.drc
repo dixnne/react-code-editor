@@ -1,0 +1,5 @@
+fn main() -> Int {
+	puts("Hello, World!");
+	printf("The answer is %d\n", 42);
+	return 0;
+}
