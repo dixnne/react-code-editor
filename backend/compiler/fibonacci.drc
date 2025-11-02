@@ -8,8 +8,7 @@ fn fibonacci(n: Int) -> Int {
 fn main() -> Int {
 	let i: Int = 0;
 	while (i < 10) {
-		printf("fibonacci(%d) = %d
-", i, fibonacci(i));
+		printf("fibonacci(%d) = %d\n", i, fibonacci(i));
 		i = i + 1;
 	}
 	return 0;

@@ -215,7 +215,15 @@ impl<'ctx> Compiler<'ctx> {
             Literal::Float(val) => Ok(self.context.f64_type().const_float(*val).into()),
             Literal::Bool(val) => Ok(self.context.bool_type().const_int(*val as u64, false).into()),
             Literal::String(val) => {
-                let global_str = self.builder.build_global_string_ptr(val, "str").unwrap();
+                // Process escape sequences
+                let processed = val
+                    .replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                    .replace("\\r", "\r")
+                    .replace("\\\\", "\\")
+                    .replace("\\\"", "\"")
+                    .replace("\\'", "'");
+                let global_str = self.builder.build_global_string_ptr(&processed, "str").unwrap();
                 Ok(global_str.as_basic_value_enum())
             }
         }
