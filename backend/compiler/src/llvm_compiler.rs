@@ -55,6 +55,10 @@ impl<'ctx> Compiler<'ctx> {
         // Declare puts: i32 puts(i8*)
         let puts_type = i32_type.fn_type(&[i8_ptr_type.into()], false);
         self.module.add_function("puts", puts_type, None);
+
+        // Declare scanf: i32 scanf(i8*, ...)
+        let scanf_type = i32_type.fn_type(&[i8_ptr_type.into()], true); // true = variadic
+        self.module.add_function("scanf", scanf_type, None);
     }
 
     pub fn compile(&mut self, program: &Program) -> Result<String, String> {
@@ -401,10 +405,34 @@ impl<'ctx> Compiler<'ctx> {
         let func = self.module.get_function(func_name)
             .ok_or_else(|| format!("Undefined function: {}", func_name))?;
 
-        let args: Vec<BasicMetadataValueEnum> = arguments
-            .iter()
-            .map(|arg| self.compile_expression(arg).map(|v| v.into()))
-            .collect::<Result<Vec<_>, _>>()?;
+        // Special handling for scanf - need to pass pointers to variables
+        let args: Vec<BasicMetadataValueEnum> = if func_name == "scanf" {
+            arguments
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| {
+                    if i == 0 {
+                        // First argument is the format string
+                        self.compile_expression(arg).map(|v| v.into())
+                    } else {
+                        // Other arguments should be pointers to variables
+                        match arg {
+                            Expression::Identifier(ident) => {
+                                let ptr = self.variables.get(&ident.name)
+                                    .ok_or_else(|| format!("Undefined variable: {}", ident.name))?;
+                                Ok((*ptr).into())
+                            }
+                            _ => Err("scanf arguments must be variables".to_string()),
+                        }
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            arguments
+                .iter()
+                .map(|arg| self.compile_expression(arg).map(|v| v.into()))
+                .collect::<Result<Vec<_>, _>>()?
+        };
 
         let call_site = self.builder.build_call(func, &args, "tmp").unwrap();
         call_site.try_as_basic_value().left().ok_or("Function call returned void".to_string())

@@ -1,0 +1,8 @@
+fn main() -> Int {
+	let operacion: String = "";
+	printf("Hola\n Bienvenido a la calculadora! Por Diego Sbeastian Magdaleno Carrillo\n");
+	printf("¿Que operacion quieres realizar? (+,-,/,*): \n");
+	scanf("%s", operacion);
+	printf("Tu operacion es %s\n", operacion);
+	return 0;
+}

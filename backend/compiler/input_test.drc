@@ -1,0 +1,7 @@
+fn main() -> Int {
+	let n: Int = 0;
+	printf("Enter a number: ");
+	scanf("%d", n);
+	printf("You entered: %d\n", n);
+	return 0;
+}
