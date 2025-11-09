@@ -28,6 +28,7 @@ inkwell = { version = "0.6.0", features = ["llvm18-1"] }
 llvm-sys = { version = "181.2.0", features = ["force-static"] }
 clap = { version = "4.4", features = ["derive"] }
 colored = "2.0"
+tempfile = "3.8"
 
 [build-dependencies]
 tonic-build = "0.10"

@@ -54,6 +54,9 @@ if (!window.electron) {
                 }
             };
         },
+        llvmTranslate: async (code) => ({ llvm_ir: "; LLVM IR mock\ndefine i32 @main() {\nentry:\n  ret i32 0\n}" }),
+        llvmOptimize: async (code) => ({ optimized_ir: "; Optimized LLVM IR mock\ndefine i32 @main() {\nentry:\n  ret i32 0\n}" }),
+        executeProgram: async (code) => ({ exit_code: 0, output: "Program executed successfully", error: "" }),
     };
 }
 
@@ -358,6 +361,9 @@ function App() {
     const [syntax, setSyntax] = useState({ ast: null, errors: [] });
     // --- MODIFICADO ---: El estado semántico ahora incluye la tabla de símbolos
     const [semantic, setSemantic] = useState({ annotated_ast: null, errors: [], symbol_table: null }); 
+    const [llvmIR, setLlvmIR] = useState("");
+    const [optimizedIR, setOptimizedIR] = useState("");
+    const [executionResult, setExecutionResult] = useState({ exit_code: null, output: "", error: "" }); 
 
     const aceEditorRef = useRef(null);
     const currentTheme = Themes[themeCode] || Themes.pointerOfDoom;
@@ -395,21 +401,54 @@ function App() {
                 setTokens({ tokens: [] });
                 setSyntax({ ast: null, errors: [] });
                 setSemantic({ annotated_ast: null, errors: [], symbol_table: null });
+                setLlvmIR("");
+                setOptimizedIR("");
+                setExecutionResult({ exit_code: null, output: "", error: "" });
                 return;
             }
             try {
                 const lexerResult = await window.electron.runLexer(editorContent);
                 if (lexerResult) setTokens(lexerResult);
+                
                 const result = await window.electron.runCompiler(editorContent);
                 if (result) {
                     setSyntax(result.parse_response || { ast: null, errors: [] });
                     setSemantic(result.semantic_response || { annotated_ast: null, errors: [], symbol_table: null });
+                }
+
+                // Only fetch LLVM IR and execute if there are no errors
+                const hasErrors = (result?.parse_response?.errors?.length > 0) || 
+                                  (result?.semantic_response?.errors?.length > 0);
+                
+                if (!hasErrors) {
+                    try {
+                        const llvmResult = await window.electron.llvmTranslate(editorContent);
+                        if (llvmResult) setLlvmIR(llvmResult.llvm_ir || "");
+
+                        const optimizedResult = await window.electron.llvmOptimize(editorContent);
+                        if (optimizedResult) setOptimizedIR(optimizedResult.optimized_ir || "");
+
+                        const execResult = await window.electron.executeProgram(editorContent);
+                        if (execResult) setExecutionResult(execResult);
+                    } catch (llvmError) {
+                        console.error("Error in LLVM/execution phase:", llvmError);
+                        setLlvmIR("");
+                        setOptimizedIR("");
+                        setExecutionResult({ exit_code: -1, output: "", error: String(llvmError) });
+                    }
+                } else {
+                    setLlvmIR("");
+                    setOptimizedIR("");
+                    setExecutionResult({ exit_code: null, output: "", error: "" });
                 }
             } catch (error) {
                 console.error("Error durante la compilación:", error);
                 setTokens({ tokens: [] });
                 setSyntax({ ast: null, errors: [] });
                 setSemantic({ annotated_ast: null, errors: [], symbol_table: null });
+                setLlvmIR("");
+                setOptimizedIR("");
+                setExecutionResult({ exit_code: null, output: "", error: "" });
             }
         };
         const debounce = setTimeout(compileCode, 500);
@@ -424,9 +463,19 @@ function App() {
             case 0: return <TokenTable tokens={tokens} />;
             case 1: return <TreeView data={syntax} theme={currentTheme} />;
             case 2: return <TreeView data={{ ast: semantic.annotated_ast }} theme={currentTheme} />;
-            case 3: return <div className="p-4 text-gray-400">Panel de Código Intermedio (placeholder)</div>;
+            case 3: return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary}}>{llvmIR || "No LLVM IR available. Check for errors."}</div>;
+            case 4: {
+                // Check if optimization made changes
+                if (!optimizedIR) {
+                    return <div className="p-4 text-gray-400">No optimization available. Check for errors.</div>;
+                }
+                if (llvmIR === optimizedIR) {
+                    return <div className="p-4 text-center text-gray-400">No optimization applied (code already optimal)</div>;
+                }
+                return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary}}>{optimizedIR}</div>;
+            }
             // --- NUEVO ---: Llama al nuevo componente para renderizar la tabla de símbolos
-            case 4: return <SymbolTableView symbolTable={semantic.symbol_table} theme={currentTheme} />;
+            case 5: return <SymbolTableView symbolTable={semantic.symbol_table} theme={currentTheme} />;
             default: return null;
         }
     };
@@ -440,11 +489,46 @@ function App() {
                 }
             </div>
         );
+        const ExecutionDisplay = () => {
+            if (executionResult.exit_code === null) {
+                return <div className="p-4 text-gray-400">No execution results. Compile code without errors first.</div>;
+            }
+            
+            const hasOutput = executionResult.output && executionResult.output.trim().length > 0;
+            const hasError = executionResult.error && executionResult.error.trim().length > 0;
+            
+            return (
+                <div className="p-4 text-sm font-mono text-gray-300 overflow-auto h-full">
+                    <div className="mb-2">
+                        <span className="font-bold">Exit Code: </span>
+                        <span className={executionResult.exit_code === 0 ? "text-green-400" : "text-red-400"}>
+                            {executionResult.exit_code}
+                        </span>
+                    </div>
+                    {hasOutput && (
+                        <div className="mb-2">
+                            <div className="font-bold text-blue-400">Output:</div>
+                            <pre className="whitespace-pre-wrap">{executionResult.output}</pre>
+                        </div>
+                    )}
+                    {hasError && (
+                        <div>
+                            <div className="font-bold text-red-400">Error:</div>
+                            <pre className="whitespace-pre-wrap text-red-400">{executionResult.error}</pre>
+                        </div>
+                    )}
+                    {!hasOutput && !hasError && executionResult.exit_code === 0 && (
+                        <div className="text-gray-500 italic">Program completed with no output</div>
+                    )}
+                </div>
+            );
+        };
+        
         switch (consoleTab) {
             case 0: return <ErrorsDisplay errors={tokens.tokens?.filter(t => t.token_type === "Invalid")} type="léxico" />;
             case 1: return <ErrorsDisplay errors={syntax.errors} type="sintáctico" />;
             case 2: return <ErrorsDisplay errors={semantic.errors} type="semántico" />;
-            case 3: return <div className="p-4 text-gray-300">Salida de ejecución (placeholder)</div>;
+            case 3: return <ExecutionDisplay />;
             default: return null;
         }
     };
@@ -483,7 +567,7 @@ function App() {
                             <PanelResizeHandle className="w-2 bg-gray-700 hover:bg-blue-600 transition-colors" />
                             <Panel defaultSize={40} minSize={20}>
                                 <div className="flex flex-col h-full rounded-tr-md" style={{ backgroundColor: currentTheme.primary }}>
-                                    <Tabs items={["Lexical", "Syntactic", "Semantic", "Intermediate", "Hash"]} activeTab={analysisTab} setActiveTab={setAnalysisTab} theme={currentTheme} />
+                                    <Tabs items={["Lexical", "Syntactic", "Semantic", "Intermediate", "Optimizations", "Hash"]} activeTab={analysisTab} setActiveTab={setAnalysisTab} theme={currentTheme} />
                                     <div className="flex-grow overflow-auto" style={{ backgroundColor: currentTheme.secondarySemi }}>{renderAnalysisPanel()}</div>
                                 </div>
                             </Panel>

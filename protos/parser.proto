@@ -15,6 +15,9 @@ service Compiler {
   rpc Compile(CompilerRequest) returns (CompilerResponse);
   rpc GetAst(CompilerRequest) returns (Program);
   rpc GetAnnotatedAst(CompilerRequest) returns (AnnotatedNode);
+  rpc LlvmTranslate(CompilerRequest) returns (LlvmTranslateResponse);
+  rpc LlvmOptimize(CompilerRequest) returns (LlvmOptimizeResponse);
+  rpc Execute(CompilerRequest) returns (ExecuteResponse);
 }
 
 message CompilerRequest {
@@ -54,4 +57,18 @@ message ParserError {
   string message = 2;
   uint32 line = 3;
   uint32 column = 4;
+}
+
+message LlvmTranslateResponse {
+  string llvm_ir = 1;
+}
+
+message LlvmOptimizeResponse {
+  string optimized_ir = 1;
+}
+
+message ExecuteResponse {
+  int32 exit_code = 1;
+  string output = 2;
+  string error = 3;
 }

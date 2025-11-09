@@ -8,8 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::env::var("OUT_DIR").unwrap() + "/compiler_descriptor.bin",
         )
         .compile(
-            &["proto/lexer.proto", "proto/parser.proto", "proto/semantic.proto"], // Lista de archivos a compilar
-            &["proto"], // Directorio donde buscar imports
+            &["../../protos/lexer.proto", "../../protos/parser.proto", "../../protos/semantic.proto"], // Lista de archivos a compilar
+            &["../../protos"], // Directorio donde buscar imports
         )?;
 
     Ok(())

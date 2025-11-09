@@ -135,6 +135,54 @@ ipcMain.handle('run-compiler', async (_event, sourceCode) => {
   });
 });
 
+// Handler for LLVM intermediate code generation
+ipcMain.handle('llvm-translate', async (_event, sourceCode) => {
+  console.log("🔄 Generating LLVM IR...");
+  return new Promise((resolve, reject) => {
+    clientCompiler.LlvmTranslate({ source: sourceCode }, (err, response) => {
+      if (err) {
+        console.error("❌ gRPC LLVM Translate Error:", err);
+        reject(err.message);
+      } else {
+        console.log("✅ LLVM IR Generated");
+        resolve(response);
+      }
+    });
+  });
+});
+
+// Handler for LLVM optimization
+ipcMain.handle('llvm-optimize', async (_event, sourceCode) => {
+  console.log("⚡ Optimizing LLVM IR...");
+  return new Promise((resolve, reject) => {
+    clientCompiler.LlvmOptimize({ source: sourceCode }, (err, response) => {
+      if (err) {
+        console.error("❌ gRPC LLVM Optimize Error:", err);
+        reject(err.message);
+      } else {
+        console.log("✅ LLVM IR Optimized");
+        resolve(response);
+      }
+    });
+  });
+});
+
+// Handler for program execution
+ipcMain.handle('execute-program', async (_event, sourceCode) => {
+  console.log("▶️ Executing program...");
+  return new Promise((resolve, reject) => {
+    clientCompiler.Execute({ source: sourceCode }, (err, response) => {
+      if (err) {
+        console.error("❌ gRPC Execute Error:", err);
+        reject(err.message);
+      } else {
+        console.log("✅ Program Executed");
+        resolve(response);
+      }
+    });
+  });
+});
+
 ipcMain.handle('run-lexer', async (_event, code) => {
   console.log("Received code for lexing:", code);
   return new Promise((resolve, reject) => {

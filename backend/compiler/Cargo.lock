@@ -299,6 +299,7 @@ dependencies = [
  "insta",
  "llvm-sys",
  "prost 0.13.5",
+ "tempfile",
  "tokio",
  "tonic",
  "tonic-build",

@@ -15,13 +15,10 @@ if (process.contextIsolated) {
       saveFileAs: (data) => ipcRenderer.invoke("save-file-as", data),
       writeFile: () => ipcRenderer.invoke("write-file"),
       runLexer: (code) => ipcRenderer.invoke("run-lexer", code),
-      
-      // --- CORRECCIÓN CRÍTICA ---
-      // La función expuesta al frontend debe coincidir con el handler en `main/index.js`.
-      // El handler se llama 'run-compiler', no 'compile'.
-      runCompiler(data) { 
-        return ipcRenderer.invoke("run-compiler", data);
-      }
+      runCompiler: (data) => ipcRenderer.invoke("run-compiler", data),
+      llvmTranslate: (code) => ipcRenderer.invoke("llvm-translate", code),
+      llvmOptimize: (code) => ipcRenderer.invoke("llvm-optimize", code),
+      executeProgram: (code) => ipcRenderer.invoke("execute-program", code),
     });
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
@@ -36,6 +33,10 @@ if (process.contextIsolated) {
     saveFileAs: (data) => ipcRenderer.invoke("save-file-as", data),
     writeFile: () => ipcRenderer.invoke("write-file"),
     runLexer: (code) => ipcRenderer.invoke("run-lexer", code),
+    runCompiler: (data) => ipcRenderer.invoke("run-compiler", data),
+    llvmTranslate: (code) => ipcRenderer.invoke("llvm-translate", code),
+    llvmOptimize: (code) => ipcRenderer.invoke("llvm-optimize", code),
+    executeProgram: (code) => ipcRenderer.invoke("execute-program", code),
   }
   window.api = api
 }

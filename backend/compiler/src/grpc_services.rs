@@ -20,7 +20,7 @@ use compiler::{
     AnalyzeRequest, AnnotatedNode, AstNode, CompilerRequest, CompilerResponse, ParseRequest,
     ParseResponse, ParseSourceRequest, ParserError, SemanticAnalysisResponse,
     SemanticError as ProtoSemanticError, Token, TokenList, Program as ProtoProgram,
-    LlvmTranslateResponse
+    LlvmTranslateResponse, LlvmOptimizeResponse, ExecuteResponse
 };
 use crate::llvm_compiler::compile_to_llvm_ir;
 // --- Implementación del Servicio del Lexer ---
@@ -268,6 +268,195 @@ impl Compiler for CompilerService {
                 llvm_ir: String::new(),
             })),
         }
+    }
+
+    async fn llvm_optimize(
+        &self,
+        request: Request<CompilerRequest>,
+    ) -> Result<Response<LlvmOptimizeResponse>, Status> {
+        let source_code = request.into_inner().source;
+
+        // 1. Lexer
+        let mut lexer = LexicalAnalyzer::new(&source_code);
+        let tokens = lexer.scan_tokens();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
+
+        // 2. Parser
+        let ParseResult {
+            ast,
+            errors: parse_errors,
+        } = parse_tokens(&filtered_tokens);
+
+        if !parse_errors.is_empty() {
+            return Err(Status::invalid_argument(format!(
+                "Syntax errors found: {:?}",
+                parse_errors
+            )));
+        }
+
+        // 3. Semantic Analyzer
+        let mut semantic_analyzer = SemanticAnalyzer::new();
+        semantic_analyzer.analyze(&ast);
+
+        if !semantic_analyzer.errors.is_empty() {
+            return Err(Status::invalid_argument(format!(
+                "Semantic errors found: {:?}",
+                semantic_analyzer.errors
+            )));
+        }
+
+        // 4. LLVM Compilation
+        let llvm_ir = match compile_to_llvm_ir(&ast) {
+            Ok(ir) => ir,
+            Err(e) => return Err(Status::internal(format!("LLVM compilation failed: {}", e))),
+        };
+
+        // 5. Optimize using LLVM opt tool (try opt-18 first, then opt)
+        use std::process::Command;
+        use std::io::Write;
+        
+        let opt_command = if Command::new("opt-18").arg("--version").output().is_ok() {
+            "opt-18"
+        } else {
+            "opt"
+        };
+        
+        match Command::new(opt_command)
+            .arg("-O2")
+            .arg("-S")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(mut child) => {
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = stdin.write_all(llvm_ir.as_bytes());
+                }
+
+                match child.wait_with_output() {
+                    Ok(output) if output.status.success() => {
+                        let optimized_ir = String::from_utf8_lossy(&output.stdout).to_string();
+                        Ok(Response::new(LlvmOptimizeResponse {
+                            optimized_ir,
+                        }))
+                    }
+                    _ => {
+                        // If optimization fails, return the original IR
+                        Ok(Response::new(LlvmOptimizeResponse {
+                            optimized_ir: llvm_ir,
+                        }))
+                    }
+                }
+            }
+            Err(_) => {
+                // opt not available, return original IR
+                Ok(Response::new(LlvmOptimizeResponse {
+                    optimized_ir: llvm_ir,
+                }))
+            }
+        }
+    }
+
+    async fn execute(
+        &self,
+        request: Request<CompilerRequest>,
+    ) -> Result<Response<ExecuteResponse>, Status> {
+        let source_code = request.into_inner().source;
+
+        // 1. Lexer
+        let mut lexer = LexicalAnalyzer::new(&source_code);
+        let tokens = lexer.scan_tokens();
+        let filtered_tokens: Vec<LexerToken> = tokens
+            .into_iter()
+            .filter(|t| {
+                !matches!(
+                    t.token_type,
+                    TokenType::Whitespace
+                        | TokenType::NewLine
+                        | TokenType::CommentSingle
+                        | TokenType::CommentMultiLine
+                        | TokenType::Unknown
+                )
+            })
+            .collect();
+
+        // 2. Parser
+        let ParseResult {
+            ast,
+            errors: parse_errors,
+        } = parse_tokens(&filtered_tokens);
+
+        if !parse_errors.is_empty() {
+            return Err(Status::invalid_argument(format!(
+                "Syntax errors found: {:?}",
+                parse_errors
+            )));
+        }
+
+        // 3. Semantic Analyzer
+        let mut semantic_analyzer = SemanticAnalyzer::new();
+        semantic_analyzer.analyze(&ast);
+
+        if !semantic_analyzer.errors.is_empty() {
+            return Err(Status::invalid_argument(format!(
+                "Semantic errors found: {:?}",
+                semantic_analyzer.errors
+            )));
+        }
+
+        // 4. LLVM Compilation
+        let llvm_ir = match compile_to_llvm_ir(&ast) {
+            Ok(ir) => ir,
+            Err(e) => return Err(Status::internal(format!("LLVM compilation failed: {}", e))),
+        };
+
+        // 5. Compile to executable using lli (LLVM interpreter)
+        use std::process::Command;
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Write LLVM IR to a temporary file
+        let mut temp_file = NamedTempFile::new()
+            .map_err(|e| Status::internal(format!("Failed to create temp file: {}", e)))?;
+        
+        temp_file.write_all(llvm_ir.as_bytes())
+            .map_err(|e| Status::internal(format!("Failed to write to temp file: {}", e)))?;
+
+        // Try lli-18 first, then lli
+        let lli_command = if Command::new("lli-18").arg("--version").output().is_ok() {
+            "lli-18"
+        } else {
+            "lli"
+        };
+
+        // Execute with lli
+        let output = Command::new(lli_command)
+            .arg(temp_file.path())
+            .output()
+            .map_err(|e| Status::internal(format!("Failed to execute with {}: {}", lli_command, e)))?;
+
+        let exit_code = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        Ok(Response::new(ExecuteResponse {
+            exit_code,
+            output: stdout,
+            error: stderr,
+        }))
     }
 }
 
