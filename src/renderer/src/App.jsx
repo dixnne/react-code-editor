@@ -306,13 +306,32 @@ const IdeNav = ({ onAction, theme, changeTheme }) => {
 };
 
 const Tabs = ({ items, activeTab, setActiveTab, theme }) => (
-    <div className="flex items-center border-b px-2" style={{ borderColor: theme.primary, backgroundColor: theme.secondary }}>
-        {items.map((item, index) => (
-            <button key={item} onClick={() => setActiveTab(index)}
-                className={clsx("px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors duration-200", { "border-blue-400 text-white": activeTab === index, "border-transparent text-gray-400 hover:text-white": activeTab !== index })}>
-                {item}
-            </button>
-        ))}
+    <div 
+    // Add these two classes:
+    className="flex items-center border-b px-2 overflow-x-auto whitespace-nowrap min-h-9 h-9" 
+    style={{ borderColor: theme.primary, backgroundColor: theme.secondary }}
+    >
+    {items.map((item, index) => (
+        <button 
+        key={item} 
+        onClick={() => setActiveTab(index)}
+        className={clsx(
+            "px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors duration-200", 
+            { 
+            "border-b-white": activeTab === index, 
+            // Typo fixed here (was activeTop)
+            "border-transparent": activeTab !== index 
+            }
+        )}
+        style={{
+            color: theme.secondary,
+            ...(activeTab === index && {color: theme.primary, backgroundColor: theme.tertiary}),
+            ...(activeTab !== index && {color: theme.text})
+        }}
+        >
+        {item}
+        </button>
+    ))}
     </div>
 );
 
@@ -463,16 +482,16 @@ function App() {
             case 0: return <TokenTable tokens={tokens} />;
             case 1: return <TreeView data={syntax} theme={currentTheme} />;
             case 2: return <TreeView data={{ ast: semantic.annotated_ast }} theme={currentTheme} />;
-            case 3: return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary}}>{llvmIR || "No LLVM IR available. Check for errors."}</div>;
+            case 3: return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary, backgroundColor: currentTheme.background + "50"}}>{llvmIR || "No LLVM IR available. Check for errors."}</div>;
             case 4: {
                 // Check if optimization made changes
                 if (!optimizedIR) {
-                    return <div className="p-4 text-gray-400">No optimization available. Check for errors.</div>;
+                    return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary, backgroundColor: currentTheme.background + "50"}}>No optimization available. Check for errors.</div>;
                 }
                 if (llvmIR === optimizedIR) {
-                    return <div className="p-4 text-center text-gray-400">No optimization applied (code already optimal)</div>;
+                    return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary, backgroundColor: currentTheme.background + "50"}}>No optimization applied (code already optimal)</div>;
                 }
-                return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary}}>{optimizedIR}</div>;
+                return <div className="p-4 font-mono text-sm whitespace-pre-wrap overflow-auto h-full" style={{color: currentTheme.tertiary, backgroundColor: currentTheme.background + "50"}}>{optimizedIR}</div>;
             }
             // --- NUEVO ---: Llama al nuevo componente para renderizar la tabla de símbolos
             case 5: return <SymbolTableView symbolTable={semantic.symbol_table} theme={currentTheme} />;
