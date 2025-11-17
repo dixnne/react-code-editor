@@ -1,0 +1,31 @@
+fn is_even(n: Int) -> Int {
+	if (n / 2 * 2 == n) {
+		return 1;
+	}
+	return 0;
+}
+
+fn main() -> Int {
+	let i: Int = 1;
+	
+	printf("Even Numbers from 1 to 20:\n");
+	while (i <= 20) {
+		if (is_even(i)) {
+			printf("%d ", i);
+		}
+		i = i + 1;
+	}
+	printf("\n");
+	
+	printf("\nOdd Numbers from 1 to 15:\n");
+	let j: Int = 1;
+	while (j <= 15) {
+		if (is_even(j) != 1) {
+			printf("%d ", j);
+		}
+		j = j + 1;
+	}
+	printf("\n");
+	
+	return 0;
+}

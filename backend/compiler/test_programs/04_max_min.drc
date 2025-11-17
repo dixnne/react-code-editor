@@ -1,0 +1,36 @@
+fn max(a: Int, b: Int) -> Int {
+	if (a > b) {
+		return a;
+	}
+	return b;
+}
+
+fn min(a: Int, b: Int) -> Int {
+	if (a < b) {
+		return a;
+	}
+	return b;
+}
+
+fn max_of_three(a: Int, b: Int, c: Int) -> Int {
+	return max(a, max(b, c));
+}
+
+fn min_of_three(a: Int, b: Int, c: Int) -> Int {
+	return min(a, min(b, c));
+}
+
+fn main() -> Int {
+	let x: Int = 45;
+	let y: Int = 78;
+	let z: Int = 23;
+	
+	printf("Finding Maximum and Minimum\n");
+	printf("Numbers: %d, %d, %d\n", x, y, z);
+	printf("Max of %d and %d = %d\n", x, y, max(x, y));
+	printf("Min of %d and %d = %d\n", x, y, min(x, y));
+	printf("Max of all three = %d\n", max_of_three(x, y, z));
+	printf("Min of all three = %d\n", min_of_three(x, y, z));
+	
+	return 0;
+}

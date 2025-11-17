@@ -294,7 +294,15 @@ impl<'ctx> Compiler<'ctx> {
     fn compile_if(&mut self, if_stmt: &IfStatement) -> Result<(), String> {
         let condition = self.compile_expression(&if_stmt.condition)?;
         let condition = match condition {
-            BasicValueEnum::IntValue(i) => i,
+            BasicValueEnum::IntValue(i) => {
+                // Convert to i1 by comparing with zero
+                if i.get_type().get_bit_width() == 1 {
+                    i
+                } else {
+                    let zero = i.get_type().const_zero();
+                    self.builder.build_int_compare(IntPredicate::NE, i, zero, "tobool").unwrap()
+                }
+            },
             _ => return Err("Condition must be boolean".to_string()),
         };
 
@@ -350,7 +358,15 @@ impl<'ctx> Compiler<'ctx> {
 
         let condition = self.compile_expression(&while_stmt.condition)?;
         let condition = match condition {
-            BasicValueEnum::IntValue(i) => i,
+            BasicValueEnum::IntValue(i) => {
+                // Convert to i1 by comparing with zero
+                if i.get_type().get_bit_width() == 1 {
+                    i
+                } else {
+                    let zero = i.get_type().const_zero();
+                    self.builder.build_int_compare(IntPredicate::NE, i, zero, "tobool").unwrap()
+                }
+            },
             _ => return Err("Condition must be boolean".to_string()),
         };
 
@@ -387,7 +403,15 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.position_at_end(cond_bb);
         let condition = self.compile_expression(&do_until.condition)?;
         let condition = match condition {
-            BasicValueEnum::IntValue(i) => i,
+            BasicValueEnum::IntValue(i) => {
+                // Convert to i1 by comparing with zero
+                if i.get_type().get_bit_width() == 1 {
+                    i
+                } else {
+                    let zero = i.get_type().const_zero();
+                    self.builder.build_int_compare(IntPredicate::NE, i, zero, "tobool").unwrap()
+                }
+            },
             _ => return Err("Condition must be boolean".to_string()),
         };
 

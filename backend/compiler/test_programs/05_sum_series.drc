@@ -1,0 +1,51 @@
+fn sum_to_n(n: Int) -> Int {
+	let sum: Int = 0;
+	let i: Int = 1;
+	while (i <= n) {
+		sum = sum + i;
+		i = i + 1;
+	}
+	return sum;
+}
+
+fn sum_squares(n: Int) -> Int {
+	let sum: Int = 0;
+	let i: Int = 1;
+	while (i <= n) {
+		sum = sum + (i * i);
+		i = i + 1;
+	}
+	return sum;
+}
+
+fn power(base: Int, exp: Int) -> Int {
+	if (exp == 0) {
+		return 1;
+	}
+	let result: Int = 1;
+	let i: Int = 0;
+	while (i < exp) {
+		result = result * base;
+		i = i + 1;
+	}
+	return result;
+}
+
+fn main() -> Int {
+	printf("Series and Powers\n\n");
+	
+	printf("Sum of 1 to 10 = %d\n", sum_to_n(10));
+	printf("Sum of 1 to 100 = %d\n", sum_to_n(100));
+	
+	printf("\nSum of squares from 1 to 5 = %d\n", sum_squares(5));
+	printf("Sum of squares from 1 to 10 = %d\n", sum_squares(10));
+	
+	printf("\nPowers of 2:\n");
+	let i: Int = 0;
+	while (i <= 8) {
+		printf("2^%d = %d\n", i, power(2, i));
+		i = i + 1;
+	}
+	
+	return 0;
+}

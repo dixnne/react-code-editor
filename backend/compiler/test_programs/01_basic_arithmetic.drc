@@ -1,0 +1,17 @@
+fn main() -> Int {
+	let a: Int = 10;
+	let b: Int = 20;
+	let sum: Int = a + b;
+	let diff: Int = b - a;
+	let prod: Int = a * b;
+	let quot: Int = b / a;
+	
+	printf("Basic Arithmetic Operations\n");
+	printf("a = %d, b = %d\n", a, b);
+	printf("Sum: %d + %d = %d\n", a, b, sum);
+	printf("Difference: %d - %d = %d\n", b, a, diff);
+	printf("Product: %d * %d = %d\n", a, b, prod);
+	printf("Quotient: %d / %d = %d\n", b, a, quot);
+	
+	return 0;
+}

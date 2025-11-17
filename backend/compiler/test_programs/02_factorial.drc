@@ -1,0 +1,18 @@
+fn factorial(n: Int) -> Int {
+	if (n <= 1) {
+		return 1;
+	}
+	return n * factorial(n - 1);
+}
+
+fn main() -> Int {
+	let num: Int = 5;
+	let result: Int = factorial(num);
+	
+	printf("Factorial Program\n");
+	printf("Factorial of %d = %d\n", num, result);
+	printf("Factorial of 10 = %d\n", factorial(10));
+	printf("Factorial of 7 = %d\n", factorial(7));
+	
+	return 0;
+}
